@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { CameraView, CameraType, useCameraPermissions } from "expo-camera/next";
+import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import { Button, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { manipulateAsync, FlipType, SaveFormat } from "expo-image-manipulator";
@@ -27,35 +27,34 @@ export default function HomeView() {
   const [checkForNewSnaps, setCheckForNewSnaps] = useState(true);
   const [pendingSnaps, setPendingSnaps] = useState<Snap[]>([]);
 
-  const fetchNewSnaps = async () => {
-    const snaps = await getSnaps(lastSnap.key);
-    if (!snaps) {
-      return;
-    }
-    const pendingSnaps: Snap[] = snaps
-      .filter(
-        (item) =>
-          item.Key &&
-          item.LastModified &&
-          !item.Key.includes(clientId) &&
-          (lastSnap.LastModified === undefined ||
-            item.LastModified > lastSnap.LastModified)
-      )
-      .map((item) => ({
-        // TODO: refactor
-        key: item.Key!,
-        LastModified: item.LastModified!,
-      }));
-    setPendingSnaps(pendingSnaps);
-  };
-
   useEffect(() => {
+    const fetchNewSnaps = async () => {
+      const snaps = await getSnaps(lastSnap.key);
+      if (!snaps) {
+        return;
+      }
+      const pendingSnaps: Snap[] = snaps
+        .filter(
+          (item) =>
+            item.Key &&
+            item.LastModified &&
+            !item.Key.includes(clientId) &&
+            (lastSnap.LastModified === undefined ||
+              item.LastModified > lastSnap.LastModified)
+        )
+        .map((item) => ({
+          // TODO: refactor
+          key: item.Key!,
+          LastModified: item.LastModified!,
+        }));
+      setPendingSnaps(pendingSnaps);
+    };
     if (clientId && checkForNewSnaps) {
       console.log("Checking for new snaps...");
       fetchNewSnaps();
       setCheckForNewSnaps(false);
     }
-  }, [clientId, checkForNewSnaps]);
+  }, [clientId, checkForNewSnaps, lastSnap.key, lastSnap.LastModified]);
 
   function goToGallery() {
     setShowGallery(true);
