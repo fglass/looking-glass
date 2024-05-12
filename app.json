@@ -29,6 +29,9 @@
       "eas": {
         "projectId": "288880ab-d2ce-4857-8fe3-3d03ae72a3ce"
       }
+    },
+    "infoPlist": {
+      "RCTAsyncStorageExcludeFromBackup": false
     }
   }
 }
