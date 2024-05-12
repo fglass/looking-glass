@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RootSiblingParent } from "react-native-root-siblings";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { initDatabase } from "./data-access/database";
 import HomeView from "./components/HomeView";
 
@@ -14,7 +15,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <RootSiblingParent>
-        <HomeView />
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <HomeView />
+        </GestureHandlerRootView>
       </RootSiblingParent>
     </QueryClientProvider>
   );
