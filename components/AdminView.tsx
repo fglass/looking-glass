@@ -30,10 +30,10 @@ export default function AdminView({
         </Text>
         <Text style={styles.text}>Client ID: {clientId}</Text>
         <Text style={styles.text}>Push Token: {pushToken.slice(18, -1)}</Text>
-        <Text style={styles.text}>Last Snap Key: {lastSnap.key ?? "null"}</Text>
         <Text style={styles.text}>
           Last Snap LM: {lastSnap.LastModified?.toISOString()}
         </Text>
+        <Text style={styles.text}>Last Snap Key: {lastSnap.key ?? "null"}</Text>
       </View>
     </GestureDetector>
   );

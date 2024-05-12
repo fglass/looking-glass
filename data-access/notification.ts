@@ -61,21 +61,48 @@ function handleRegistrationError(errorMessage: string) {
   throw new Error(errorMessage);
 }
 
-export async function sendPushNotification(recipientToken: string) {
-  const message = {
-    to: recipientToken,
-    title: "New Snap 🔍",
-    sound: "default",
-    badge: 1,
-  };
+type PushNotification = {
+  title: string;
+  badge?: number;
+};
 
-  return await fetch("https://exp.host/--/api/v2/push/send", {
+export async function sendPushNotifications({
+  clientId,
+  tokens,
+  notification,
+}: {
+  clientId: string;
+  tokens: { Key?: string }[];
+  notification: PushNotification;
+}) {
+  const messages: (PushNotification | { to: string; sound: string })[] = [];
+
+  tokens.forEach((t) => {
+    if (t.Key) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const [_, client, token] = t.Key.split("|");
+      if (client !== clientId) {
+        console.log(`Sending notification to ${client} (${token})...`);
+        messages.push({
+          ...notification,
+          to: token,
+          sound: "default",
+        });
+      }
+    }
+  });
+
+  const resp = await fetch("https://exp.host/--/api/v2/push/send", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Accept-encoding": "gzip, deflate",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(message),
+    body: JSON.stringify(messages),
   });
+
+  if (resp.status !== 200) {
+    console.error("Error sending notifications: ", resp);
+  }
 }

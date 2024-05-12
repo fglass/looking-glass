@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   Text,
   TouchableHighlight,
+  TouchableOpacity,
   StyleSheet,
   FlatList,
   View,
@@ -92,9 +93,9 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
           renderItem={({ item }) => <Thumbnail snap={item} />}
         />
         <View style={styles.navbar}>
-          <TouchableHighlight onPress={onClose}>
+          <TouchableOpacity onPress={onClose}>
             <MaterialIcons name="arrow-back-ios" size={36} color="yellow" />
-          </TouchableHighlight>
+          </TouchableOpacity>
           <Text style={styles.text}>
             {streakDurationDays.toLocaleString()} 🔥
           </Text>
@@ -108,7 +109,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "black",
-    paddingTop: 90,
+    paddingTop: 80,
   },
   imageContainer: {
     flex: 1,
