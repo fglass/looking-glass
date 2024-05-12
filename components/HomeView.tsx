@@ -30,7 +30,7 @@ import {
 } from "expo-notifications";
 import {
   registerForPushNotifications,
-  sendPushNotification,
+  sendPushNotifications,
 } from "../data-access/notification";
 
 type Snap = { key: string; LastModified: Date };
@@ -178,7 +178,27 @@ export default function HomeView() {
   }
 
   if (openedSnap) {
-    return <SnapView snap={openedSnap} onClose={closeOpenedSnap} />;
+    return (
+      <SnapView
+        snap={openedSnap}
+        onReaction={async (reaction) => {
+          const tokens = await getTokens();
+          if (tokens) {
+            // TODO: only to sender
+            await sendPushNotifications({
+              clientId,
+              tokens,
+              notification: { title: reaction },
+            });
+            Toast.show(`${reaction} sent!`, {
+              duration: Toast.durations.LONG,
+              position: Toast.positions.TOP,
+            });
+          }
+        }}
+        onClose={closeOpenedSnap}
+      />
+    );
   }
 
   async function takeSnap() {
@@ -231,18 +251,13 @@ export default function HomeView() {
 
     const tokens = await getTokens();
     if (tokens) {
-      tokens.forEach(async (t) => {
-        if (t.Key) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const [_, client, token] = t.Key.split("|");
-          if (client !== clientId) {
-            console.log(`Sending notification to ${client} (${token})...`);
-            const resp = await sendPushNotification(token);
-            if (resp.status !== 200) {
-              console.error("Error sending notification: ", resp);
-            }
-          }
-        }
+      await sendPushNotifications({
+        clientId,
+        tokens,
+        notification: {
+          title: "New Snap 🔍",
+          badge: 1,
+        },
       });
     }
   }
