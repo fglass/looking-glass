@@ -5,11 +5,17 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { SnapView } from "./SnapView";
 import { getSnapUrl, getSnaps } from "../data-access/s3";
+import {
+  Directions,
+  Gesture,
+  GestureDetector,
+} from "react-native-gesture-handler";
 
 const SNAP_LIMIT = 20;
 
-export default function GalleryView({ onClose }) {
-  const [openedSnap, setOpenedSnap] = useState(null);
+export default function GalleryView({ onClose }: { onClose: () => void }) {
+  const leftFling = Gesture.Fling().direction(Directions.LEFT).onStart(onClose);
+  const [openedSnap, setOpenedSnap] = useState<{ uri: string } | null>(null);
 
   const {
     isLoading,
@@ -20,13 +26,15 @@ export default function GalleryView({ onClose }) {
     queryFn: async () => {
       console.log("Fetching gallery...");
       const snaps = await getSnaps();
-      const latestSnaps = snaps
-        .reverse()
-        .slice(0, SNAP_LIMIT)
-        .map((item) => item.Key);
+
+      if (!snaps) {
+        return [];
+      }
+
+      const latestSnaps = snaps.reverse().slice(0, SNAP_LIMIT);
 
       return await Promise.all(
-        latestSnaps.map(async (snap) => await getSnapUrl(snap))
+        latestSnaps.map((item) => getSnapUrl(item.Key ?? ""))
       );
     },
     staleTime: 60 * 1000, // 1 minute
@@ -42,7 +50,7 @@ export default function GalleryView({ onClose }) {
     );
   }
 
-  const Thumbnail = ({ uri }) => {
+  const Thumbnail = ({ uri }: { uri: string }) => {
     return (
       <TouchableOpacity
         style={styles.opacityContainer}
@@ -58,18 +66,20 @@ export default function GalleryView({ onClose }) {
   };
 
   return (
-    <View>
-      <FlatList
-        numColumns={2}
-        data={gallery}
-        renderItem={({ item: uri }) => <Thumbnail uri={uri} />}
-      />
-      <View style={styles.navbar}>
-        <TouchableOpacity onPress={onClose}>
-          <MaterialIcons name="arrow-back-ios" size={36} color="yellow" />
-        </TouchableOpacity>
+    <GestureDetector gesture={leftFling}>
+      <View>
+        <FlatList
+          numColumns={2}
+          data={gallery}
+          renderItem={({ item: uri }) => <Thumbnail uri={uri} />}
+        />
+        <View style={styles.navbar}>
+          <TouchableOpacity onPress={onClose}>
+            <MaterialIcons name="arrow-back-ios" size={36} color="yellow" />
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </GestureDetector>
   );
 }
 
