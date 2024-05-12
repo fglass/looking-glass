@@ -7,7 +7,13 @@ import {
   GestureDetector,
 } from "react-native-gesture-handler";
 
-export default function AdminView({ onClose }: { onClose: () => void }) {
+export default function AdminView({
+  pushToken,
+  onClose,
+}: {
+  pushToken: string;
+  onClose: () => void;
+}) {
   const bucket = process.env.EXPO_PUBLIC_S3_BUCKET_NAME ?? "err";
   const bucketRegion = process.env.EXPO_PUBLIC_S3_BUCKET_REGION ?? "err";
   const downFling = Gesture.Fling().direction(Directions.DOWN).onStart(onClose);
@@ -23,9 +29,10 @@ export default function AdminView({ onClose }: { onClose: () => void }) {
           Bucket: {bucket} ({bucketRegion})
         </Text>
         <Text style={styles.text}>Client ID: {clientId}</Text>
+        <Text style={styles.text}>Push Token: {pushToken.slice(18, -1)}</Text>
+        <Text style={styles.text}>Last Snap Key: {lastSnap.key ?? "null"}</Text>
         <Text style={styles.text}>
-          Last Snap: {lastSnap.key ?? "null"},{" "}
-          {lastSnap.LastModified?.toISOString()}
+          Last Snap LM: {lastSnap.LastModified?.toISOString()}
         </Text>
       </View>
     </GestureDetector>
@@ -46,6 +53,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   text: {
+    fontSize: 10,
     color: "white",
   },
 });

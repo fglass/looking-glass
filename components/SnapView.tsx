@@ -1,18 +1,21 @@
 import { Image } from "expo-image";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableHighlight, View } from "react-native";
 
 export const SnapView = ({
-  uri,
+  snap,
   onClose,
 }: {
-  uri: string;
+  snap: { key: string; uri: string };
   onClose: () => void;
 }) => (
   <View style={styles.container}>
     <View style={styles.camera}>
-      <TouchableOpacity style={styles.opacityContainer} onPress={onClose}>
-        <Image source={{ uri }} style={styles.fullImage} />
-      </TouchableOpacity>
+      <TouchableHighlight style={styles.imageContainer} onPress={onClose}>
+        <Image
+          source={{ uri: snap.uri, cacheKey: snap.key }}
+          style={styles.fullImage}
+        />
+      </TouchableHighlight>
     </View>
   </View>
 );
@@ -28,7 +31,7 @@ const styles = StyleSheet.create({
   fullImage: {
     flex: 1,
   },
-  opacityContainer: {
+  imageContainer: {
     flex: 1,
   },
 });

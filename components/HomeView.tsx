@@ -5,7 +5,13 @@ import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { manipulateAsync, FlipType, SaveFormat } from "expo-image-manipulator";
 import Toast from "react-native-root-toast";
 import { useClientId, useLastSnap } from "../data-access/database";
-import { getSnapUrl, getSnaps, uploadSnap } from "../data-access/s3";
+import {
+  getSnapUrl,
+  getSnaps,
+  getTokens,
+  uploadSnap,
+  uploadToken,
+} from "../data-access/s3";
 import { SnapView } from "./SnapView";
 import { SnapPreview } from "./SnapPreview";
 import GalleryView from "./GalleryView";
@@ -15,6 +21,17 @@ import {
   Gesture,
   GestureDetector,
 } from "react-native-gesture-handler";
+import {
+  Subscription,
+  addNotificationReceivedListener,
+  addNotificationResponseReceivedListener,
+  removeNotificationSubscription,
+  setBadgeCountAsync,
+} from "expo-notifications";
+import {
+  registerForPushNotifications,
+  sendPushNotification,
+} from "../data-access/notification";
 
 type Snap = { key: string; LastModified: Date };
 
@@ -24,7 +41,10 @@ export default function HomeView() {
   const [cameraPerms, requestCameraPerms] = useCameraPermissions();
 
   const [preview, setPreview] = useState<{ uri: string } | null>(null);
-  const [openedSnap, setOpenedSnap] = useState<{ uri: string } | null>(null);
+  const [openedSnap, setOpenedSnap] = useState<{
+    key: string;
+    uri: string;
+  } | null>(null);
   const [showGallery, setShowGallery] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
 
@@ -37,12 +57,50 @@ export default function HomeView() {
   const upFling = Gesture.Fling()
     .direction(Directions.UP)
     .onStart(() => setShowAdmin(true));
-
   const rightFling = Gesture.Fling()
     .direction(Directions.RIGHT)
     .onStart(goToGallery);
-
   const doubleTap = Gesture.Tap().numberOfTaps(2).onStart(toggleCameraType);
+
+  const [expoPushToken, setExpoPushToken] = useState("");
+  const notificationListener = useRef<Subscription>();
+  const responseListener = useRef<Subscription>();
+
+  useEffect(() => {
+    if (!clientId) {
+      return;
+    }
+
+    console.log("Registering for notifications...");
+    registerForPushNotifications()
+      .then((token) => {
+        setExpoPushToken(token ?? "");
+        if (token) {
+          console.log("Uploading token...");
+          uploadToken(`token|${clientId}|${token}|.txt`, token).then(() =>
+            console.log("Token upload successful")
+          );
+        }
+      })
+      .catch((error: any) => setExpoPushToken(`${error}`));
+
+    notificationListener.current = addNotificationReceivedListener((n) => {
+      console.log("Notification:", n);
+    });
+
+    responseListener.current = addNotificationResponseReceivedListener(
+      (resp) => {
+        console.log("Notification resp:", resp);
+      }
+    );
+
+    return () => {
+      notificationListener.current &&
+        removeNotificationSubscription(notificationListener.current);
+      responseListener.current &&
+        removeNotificationSubscription(responseListener.current);
+    };
+  }, [clientId]);
 
   // TODO: set interval
   useEffect(() => {
@@ -61,11 +119,12 @@ export default function HomeView() {
               item.LastModified > lastSnap.LastModified)
         )
         .map((item) => ({
-          // TODO: refactor (Key)
+          // TODO: refactor -> Key
           key: item.Key!,
           LastModified: item.LastModified!,
         }));
       setPendingSnaps(pendingSnaps);
+      await setBadgeCountAsync(pendingSnaps.length);
     };
     if (clientId && checkForNewSnaps) {
       console.log("Checking for new snaps...");
@@ -84,7 +143,12 @@ export default function HomeView() {
   }
 
   if (showAdmin) {
-    return <AdminView onClose={() => setShowAdmin(false)} />;
+    return (
+      <AdminView
+        pushToken={expoPushToken}
+        onClose={() => setShowAdmin(false)}
+      />
+    );
   }
 
   if (showGallery) {
@@ -114,7 +178,7 @@ export default function HomeView() {
   }
 
   if (openedSnap) {
-    return <SnapView uri={openedSnap.uri} onClose={closeOpenedSnap} />;
+    return <SnapView snap={openedSnap} onClose={closeOpenedSnap} />;
   }
 
   async function takeSnap() {
@@ -130,18 +194,15 @@ export default function HomeView() {
       return;
     }
 
-    if (cameraType === "back") {
-      setPreview(picture);
-      return;
-    }
-
-    const flippedPicture = await manipulateAsync(
+    const transformedPicture = await manipulateAsync(
       picture.uri,
-      [{ rotate: 180 }, { flip: FlipType.Vertical }],
-      { compress: 1, format: SaveFormat.JPEG }
+      cameraType === "front"
+        ? [{ rotate: 180 }, { flip: FlipType.Vertical }]
+        : [],
+      { compress: 0.5, format: SaveFormat.JPEG }
     );
 
-    setPreview(flippedPicture);
+    setPreview(transformedPicture);
   }
 
   async function sendSnap() {
@@ -150,6 +211,7 @@ export default function HomeView() {
       return;
     }
 
+    console.log("Sending snap...");
     const prevToast = Toast.show("Sending snap...", {
       duration: Toast.durations.LONG,
       position: Toast.positions.TOP,
@@ -166,6 +228,23 @@ export default function HomeView() {
       duration: Toast.durations.LONG,
       position: Toast.positions.TOP,
     });
+
+    const tokens = await getTokens();
+    if (tokens) {
+      tokens.forEach(async (t) => {
+        if (t.Key) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const [_, client, token] = t.Key.split("|");
+          if (client !== clientId) {
+            console.log(`Sending notification to ${client} (${token})...`);
+            const resp = await sendPushNotification(token);
+            if (resp.status !== 200) {
+              console.error("Error sending notification: ", resp);
+            }
+          }
+        }
+      });
+    }
   }
 
   async function openNextSnap() {
@@ -173,7 +252,7 @@ export default function HomeView() {
     const url = await getSnapUrl(snap.key);
 
     if (url) {
-      setOpenedSnap({ uri: url });
+      setOpenedSnap({ key: snap.key, uri: url });
       setPendingSnaps(pendingSnaps.slice(1));
       setLastSnap(snap);
     }

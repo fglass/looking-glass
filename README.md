@@ -1,3 +1,3 @@
 # looking-glass
 
-Snapchat clone backed by AWS S3
+Snapchat-like app backed by AWS S3
