@@ -4,12 +4,18 @@ const s3 = new S3({
   accessKeyId: process.env.EXPO_PUBLIC_AWS_ACCESS_KEY,
   secretAccessKey: process.env.EXPO_PUBLIC_AWS_SECRET_KEY,
   region: process.env.EXPO_PUBLIC_S3_BUCKET_REGION,
+  maxRetries: 3,
+  httpOptions: {
+    connectTimeout: 5000,
+    timeout: 10000,
+  },
 });
-const bucket = process.env.EXPO_PUBLIC_S3_BUCKET_NAME ?? "";
+
+const BUCKET = process.env.EXPO_PUBLIC_S3_BUCKET_NAME ?? "";
 
 export const getSnaps = async (startAfter?: string) => {
   const params: S3.Types.ListObjectsV2Request = {
-    Bucket: bucket,
+    Bucket: BUCKET,
     Prefix: "snap",
   };
 
@@ -18,7 +24,7 @@ export const getSnaps = async (startAfter?: string) => {
   }
 
   try {
-    // TODO: pagination
+    // TODO: paginate
     const data = await s3.listObjectsV2(params).promise();
     return data.Contents;
   } catch (error) {
@@ -28,7 +34,7 @@ export const getSnaps = async (startAfter?: string) => {
 
 export const getSnapUrl = (key: string) => {
   const params = {
-    Bucket: bucket,
+    Bucket: BUCKET,
     Key: key,
   };
 
@@ -44,7 +50,7 @@ export const uploadSnap = async (uri: string, key: string) => {
   const imgBuffer = await imgResponse.arrayBuffer();
 
   const params: S3.Types.PutObjectRequest = {
-    Bucket: bucket,
+    Bucket: BUCKET,
     Key: key,
     Body: new Uint8Array(imgBuffer),
     ContentType: "image/jpg",
@@ -59,12 +65,12 @@ export const uploadSnap = async (uri: string, key: string) => {
 
 export const getTokens = async () => {
   const params: S3.Types.ListObjectsV2Request = {
-    Bucket: bucket,
+    Bucket: BUCKET,
     Prefix: "token",
   };
 
   try {
-    // TODO: pagination
+    // TODO: paginate
     const data = await s3.listObjectsV2(params).promise();
     return data.Contents;
   } catch (error) {
@@ -74,7 +80,7 @@ export const getTokens = async () => {
 
 export const uploadToken = async (key: string, token: string) => {
   const params: S3.Types.PutObjectRequest = {
-    Bucket: bucket,
+    Bucket: BUCKET,
     Key: key,
     Body: token,
     ContentType: "text/plain",

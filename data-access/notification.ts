@@ -67,12 +67,12 @@ type PushNotification = {
 };
 
 export async function sendPushNotifications({
-  clientId,
   tokens,
+  idToIgnore,
   notification,
 }: {
-  clientId: string;
   tokens: { Key?: string }[];
+  idToIgnore: string;
   notification: PushNotification;
 }) {
   const messages: (PushNotification | { to: string; sound: string })[] = [];
@@ -80,9 +80,9 @@ export async function sendPushNotifications({
   tokens.forEach((t) => {
     if (t.Key) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const [_, client, token] = t.Key.split("|");
-      if (client !== clientId) {
-        console.log(`Sending notification to ${client} (${token})...`);
+      const [_, clientId, token] = t.Key.split("|");
+      if (clientId !== idToIgnore) {
+        console.log(`Sending notification to ${clientId} (${token})...`);
         messages.push({
           ...notification,
           to: token,
