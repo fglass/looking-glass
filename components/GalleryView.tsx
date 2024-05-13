@@ -96,9 +96,11 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
           <TouchableOpacity onPress={onClose}>
             <MaterialIcons name="arrow-back-ios" size={36} color="yellow" />
           </TouchableOpacity>
-          <Text style={styles.text}>
-            {streakDurationDays.toLocaleString()} 🔥
-          </Text>
+          {streakDurationDays > 0 && (
+            <Text style={styles.text}>
+              {streakDurationDays.toLocaleString()} 🔥
+            </Text>
+          )}
         </View>
       </View>
     </GestureDetector>
@@ -109,7 +111,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "black",
-    paddingTop: 80,
+    paddingTop: 85,
   },
   imageContainer: {
     flex: 1,

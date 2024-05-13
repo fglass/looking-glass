@@ -15,7 +15,7 @@ import {
 import { SnapView } from "./SnapView";
 import { SnapPreview } from "./SnapPreview";
 import GalleryView from "./GalleryView";
-import AdminView from "./AdminView";
+import SettingsView from "./SettingsView";
 import {
   Directions,
   Gesture,
@@ -36,6 +36,7 @@ import {
 type Snap = { key: string; LastModified: Date };
 
 export default function HomeView() {
+  // TODO: refactor
   const cameraRef = useRef<CameraView>(null);
   const [cameraType, setCameraType] = useState<CameraType>("back");
   const [cameraPerms, requestCameraPerms] = useCameraPermissions();
@@ -45,8 +46,9 @@ export default function HomeView() {
     key: string;
     uri: string;
   } | null>(null);
+  const [selfSend, setSelfSend] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const clientId = useClientId();
   const { lastSnap, setLastSnap } = useLastSnap();
@@ -56,7 +58,7 @@ export default function HomeView() {
 
   const upFling = Gesture.Fling()
     .direction(Directions.UP)
-    .onStart(() => setShowAdmin(true));
+    .onStart(() => setShowSettings(true));
   const rightFling = Gesture.Fling()
     .direction(Directions.RIGHT)
     .onStart(goToGallery);
@@ -85,12 +87,14 @@ export default function HomeView() {
       .catch((error: any) => setExpoPushToken(`${error}`));
 
     notificationListener.current = addNotificationReceivedListener((n) => {
-      console.log("Notification:", n);
+      console.log("Notification received:", n);
+      setCheckForNewSnaps(true);
     });
 
     responseListener.current = addNotificationResponseReceivedListener(
       (resp) => {
-        console.log("Notification resp:", resp);
+        console.log("Notification interacted:", resp);
+        setCheckForNewSnaps(true);
       }
     );
 
@@ -102,7 +106,6 @@ export default function HomeView() {
     };
   }, [clientId]);
 
-  // TODO: set interval
   useEffect(() => {
     const fetchNewSnaps = async () => {
       const snaps = await getSnaps(lastSnap.key);
@@ -114,12 +117,12 @@ export default function HomeView() {
           (item) =>
             item.Key &&
             item.LastModified &&
-            !item.Key.includes(clientId) &&
+            (selfSend || !item.Key.includes(clientId)) &&
             (lastSnap.LastModified === undefined ||
               item.LastModified > lastSnap.LastModified)
         )
         .map((item) => ({
-          // TODO: refactor -> Key
+          // TODO: refactor -> Key?
           key: item.Key!,
           LastModified: item.LastModified!,
         }));
@@ -138,15 +141,17 @@ export default function HomeView() {
   }
 
   function closeGallery() {
-    setCheckForNewSnaps(true);
     setShowGallery(false);
+    setCheckForNewSnaps(true);
   }
 
-  if (showAdmin) {
+  if (showSettings) {
     return (
-      <AdminView
+      <SettingsView
         pushToken={expoPushToken}
-        onClose={() => setShowAdmin(false)}
+        selfSend={selfSend}
+        setSelfSend={setSelfSend}
+        onClose={() => setShowSettings(false)}
       />
     );
   }
@@ -186,8 +191,8 @@ export default function HomeView() {
           if (tokens) {
             // TODO: only to sender
             await sendPushNotifications({
-              clientId,
               tokens,
+              idToIgnore: !selfSend ? clientId : "",
               notification: { title: reaction },
             });
             Toast.show(`${reaction} sent!`, {
@@ -243,23 +248,23 @@ export default function HomeView() {
     const resp = await uploadSnap(preview.uri, key);
     console.log("Upload successful: ", resp);
 
-    Toast.hide(prevToast);
-    Toast.show("Snap sent!", {
-      duration: Toast.durations.LONG,
-      position: Toast.positions.TOP,
-    });
-
     const tokens = await getTokens();
     if (tokens) {
       await sendPushNotifications({
-        clientId,
         tokens,
+        idToIgnore: !selfSend ? clientId : "",
         notification: {
           title: "New Snap 🔍",
           badge: 1,
         },
       });
     }
+
+    Toast.hide(prevToast);
+    Toast.show("Snap sent!", {
+      duration: Toast.durations.LONG,
+      position: Toast.positions.TOP,
+    });
   }
 
   async function openNextSnap() {
