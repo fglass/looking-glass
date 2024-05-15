@@ -32,6 +32,7 @@ import {
   registerForPushNotifications,
   sendPushNotifications,
 } from "../data-access/notification";
+import { HIDDEN_SNAP_KEY } from "../constants";
 
 type Snap = { key: string; LastModified: Date };
 
@@ -134,7 +135,13 @@ export default function HomeView() {
       fetchNewSnaps();
       setCheckForNewSnaps(false);
     }
-  }, [clientId, checkForNewSnaps, lastSnap.key, lastSnap.LastModified]);
+  }, [
+    clientId,
+    selfSend,
+    checkForNewSnaps,
+    lastSnap.key,
+    lastSnap.LastModified,
+  ]);
 
   function goToGallery() {
     setShowGallery(true);
@@ -185,6 +192,7 @@ export default function HomeView() {
   if (openedSnap) {
     return (
       <SnapView
+        key={openedSnap.key}
         snap={openedSnap}
         onReaction={async (reaction) => {
           const tokens = await getTokens();
@@ -230,7 +238,7 @@ export default function HomeView() {
     setPreview(transformedPicture);
   }
 
-  async function sendSnap() {
+  async function sendSnap({ hidden }: { hidden: boolean }) {
     if (!preview) {
       console.error("No snap to send");
       return;
@@ -243,11 +251,13 @@ export default function HomeView() {
     });
     closePreview();
 
+    // Upload snap
     const now = new Date();
-    const key = `snap-${now.toISOString()}-${clientId}.jpg`;
+    const key = `snap|${now.toISOString()}|${clientId}${hidden ? `|${HIDDEN_SNAP_KEY}` : ""}.jpg`;
     const resp = await uploadSnap(preview.uri, key);
     console.log("Upload successful: ", resp);
 
+    // Send push notifications
     const tokens = await getTokens();
     if (tokens) {
       await sendPushNotifications({
@@ -261,7 +271,7 @@ export default function HomeView() {
     }
 
     Toast.hide(prevToast);
-    Toast.show("Snap sent!", {
+    Toast.show(hidden ? "🔒 Snap sent!" : "Snap sent!", {
       duration: Toast.durations.LONG,
       position: Toast.positions.TOP,
     });

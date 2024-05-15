@@ -8,7 +8,7 @@ export const SnapPreview = ({
   onClose,
 }: {
   uri: string;
-  onSend: () => void;
+  onSend: ({ hidden }: { hidden: boolean }) => void;
   onClose: () => void;
 }) => (
   <View style={styles.container}>
@@ -20,7 +20,11 @@ export const SnapPreview = ({
         </TouchableOpacity>
       </View>
       <View style={styles.overlayBottomContainer}>
-        <TouchableOpacity style={styles.button} onPress={onSend}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => onSend({ hidden: false })}
+          onLongPress={() => onSend({ hidden: true })}
+        >
           <MaterialIcons name="send" size={42} color="white" />
         </TouchableOpacity>
       </View>
