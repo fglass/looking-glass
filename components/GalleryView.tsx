@@ -17,6 +17,7 @@ import {
   Gesture,
   GestureDetector,
 } from "react-native-gesture-handler";
+import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../constants";
 
 const SNAP_LIMIT = 20;
 const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
@@ -51,7 +52,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         }))
       );
     },
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 30 * 1000, // 30s
   });
 
   if (isLoading || error) {
@@ -59,20 +60,32 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
   }
 
   if (openedSnap) {
-    return <SnapView snap={openedSnap} onClose={() => setOpenedSnap(null)} />;
+    return (
+      <SnapView
+        key={openedSnap.key}
+        snap={openedSnap}
+        onClose={() => setOpenedSnap(null)}
+      />
+    );
   }
 
   const Thumbnail = ({ snap }: { snap: { key: string; uri: string } }) => {
     return (
       <TouchableHighlight
-        style={styles.imageContainer}
+        style={styles.thumbnailContainer}
         onPress={() => setOpenedSnap(snap)}
       >
-        <Image
-          style={styles.image}
-          source={{ uri: snap.uri, cacheKey: snap.key }}
-          cachePolicy="memory-disk"
-        />
+        {snap.key.includes(HIDDEN_SNAP_KEY) ? (
+          <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }}>
+            <MaterialIcons name="lock" size={70} color="yellow" />
+          </Image>
+        ) : (
+          <Image
+            style={styles.thumbnail}
+            source={{ uri: snap.uri, cacheKey: snap.key }}
+            cachePolicy="memory-disk"
+          />
+        )}
       </TouchableHighlight>
     );
   };
@@ -111,28 +124,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "black",
-    paddingTop: 85,
   },
-  imageContainer: {
+  thumbnailContainer: {
     flex: 1,
   },
-  image: {
+  thumbnail: {
     aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   navbar: {
     flex: 1,
     flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
     position: "absolute",
     top: 30,
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
   text: {
-    margin: "auto",
-    width: "100%",
     fontSize: 20,
     fontWeight: "bold",
-    color: "white",
+    color: "yellow",
     textAlign: "center",
   },
 });
