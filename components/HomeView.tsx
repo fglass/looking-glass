@@ -59,7 +59,7 @@ export default function HomeView() {
 
   const upFling = Gesture.Fling()
     .direction(Directions.UP)
-    .onStart(() => setShowSettings(true));
+    .onStart(goToSettings);
   const rightFling = Gesture.Fling()
     .direction(Directions.RIGHT)
     .onStart(goToGallery);
@@ -142,6 +142,10 @@ export default function HomeView() {
     lastSnap.key,
     lastSnap.LastModified,
   ]);
+
+  function goToSettings() {
+    setShowSettings(true);
+  }
 
   function goToGallery() {
     setShowGallery(true);
@@ -264,7 +268,7 @@ export default function HomeView() {
         tokens,
         idToIgnore: !selfSend ? clientId : "",
         notification: {
-          title: "New Snap 🔍",
+          title: hidden ? " New Snap 🔒" : "New Snap 🔍",
           badge: 1,
         },
       });
