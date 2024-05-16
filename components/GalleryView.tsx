@@ -110,9 +110,11 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
             <MaterialIcons name="arrow-back-ios" size={36} color="yellow" />
           </TouchableOpacity>
           {streakDurationDays > 0 && (
-            <Text style={styles.text}>
-              {streakDurationDays.toLocaleString()} 🔥
-            </Text>
+            <View style={styles.streakContainer}>
+              <Text style={styles.text}>
+                {streakDurationDays.toLocaleString()} 🔥
+              </Text>
+            </View>
           )}
         </View>
       </View>
@@ -123,7 +125,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
+    backgroundColor: "#242424",
   },
   thumbnailContainer: {
     flex: 1,
@@ -143,10 +145,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
+  streakContainer: {
+    backgroundColor: "yellow",
+    paddingTop: 5,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+  },
   text: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "yellow",
+    color: "#242424",
     textAlign: "center",
   },
 });

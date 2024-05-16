@@ -1,18 +1,29 @@
 import { Image } from "expo-image";
 import { useState } from "react";
 import {
+  Dimensions,
+  Platform,
   StyleSheet,
   Text,
   TouchableHighlight,
   TouchableOpacity,
   View,
 } from "react-native";
-import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../constants";
+import { HIDDEN_SNAP_KEY } from "../constants";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
-  Directions,
-  Gesture,
-  GestureDetector,
-} from "react-native-gesture-handler";
+  Canvas,
+  Fill,
+  Group,
+  Path,
+  Skia,
+  Image as SkiaImage,
+  TextBlob,
+  matchFont,
+  notifyChange,
+  useImage,
+} from "@shopify/react-native-skia";
+import Animated, { useSharedValue } from "react-native-reanimated";
 
 const EMOJI_REACTIONS = ["❤️", "👀", "😂", "🙁"];
 
@@ -25,21 +36,66 @@ export const SnapView = ({
   onReaction?: (reaction: string) => void;
   onClose: () => void;
 }) => {
-  const [hidden, setHidden] = useState(snap.key.includes(HIDDEN_SNAP_KEY));
-  const upFling = Gesture.Fling()
-    .enabled(hidden)
-    .direction(Directions.UP)
-    .onEnd(() => setHidden(false));
+  const hidden = snap.key.includes(HIDDEN_SNAP_KEY);
+
+  const scratchPath = useSharedValue(Skia.Path.Make());
+  const scratchHandler = Gesture.Pan()
+    .onBegin((e) => {
+      scratchPath.value.moveTo(e.x, e.y);
+      scratchPath.value.lineTo(e.x, e.y);
+      notifyChange(scratchPath);
+    })
+    .onUpdate((e) => {
+      scratchPath.value.lineTo(e.x, e.y);
+      notifyChange(scratchPath);
+    });
+
+  const ScratchCard = () => {
+    const win = Dimensions.get("window");
+    const image = useImage(snap.uri);
+
+    const font = matchFont({
+      fontFamily: Platform.select({ ios: "Arial", default: "serif" }),
+      fontSize: 25,
+      fontStyle: "normal",
+      fontWeight: "bold",
+    });
+    const label = Skia.TextBlob.MakeFromText("scratch to reveal", font);
+
+    return (
+      <Canvas style={styles.imageContainer}>
+        <SkiaImage
+          image={image}
+          x={0}
+          y={0}
+          width={win.width}
+          height={win.height}
+          fit={"cover"}
+        />
+        <Group layer>
+          <Fill color="silver" />
+          <TextBlob x={100} y={win.height / 2} blob={label} color="lightgrey" />
+          <Path
+            path={scratchPath}
+            style={"stroke"}
+            strokeJoin={"round"}
+            strokeCap={"round"}
+            strokeWidth={75}
+            color={"white"}
+            blendMode={"clear"}
+          />
+        </Group>
+      </Canvas>
+    );
+  };
 
   return (
-    <GestureDetector gesture={upFling}>
-      <View style={styles.container}>
+    <GestureDetector gesture={scratchHandler}>
+      <Animated.View style={styles.container}>
         <View style={styles.camera}>
           <TouchableHighlight style={styles.imageContainer} onPress={onClose}>
             {hidden ? (
-              <Image style={styles.fullImage} source={{ blurhash: BLUR_HASH }}>
-                <Text style={styles.revealText}>Swipe up to reveal</Text>
-              </Image>
+              <ScratchCard />
             ) : (
               <Image
                 style={styles.fullImage}
@@ -48,16 +104,22 @@ export const SnapView = ({
             )}
           </TouchableHighlight>
         </View>
-        {!hidden && onReaction && (
+        {onReaction && (
           <View style={styles.reactionsContainer}>
             {EMOJI_REACTIONS.map((emoji) => (
-              <TouchableOpacity key={emoji} onPress={() => onReaction?.(emoji)}>
+              <TouchableOpacity
+                key={emoji}
+                onPress={() => {
+                  onReaction?.(emoji);
+                  onClose();
+                }}
+              >
                 <Text style={styles.emoji}>{emoji}</Text>
               </TouchableOpacity>
             ))}
           </View>
         )}
-      </View>
+      </Animated.View>
     </GestureDetector>
   );
 };
