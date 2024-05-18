@@ -28,11 +28,13 @@ import {
   removeNotificationSubscription,
   setBadgeCountAsync,
 } from "expo-notifications";
+import { Image } from "expo-image";
 import {
   registerForPushNotifications,
   sendPushNotifications,
 } from "../data-access/notification";
 import { HIDDEN_SNAP_KEY } from "../constants";
+import * as Haptics from "expo-haptics";
 
 type Snap = { key: string; LastModified: Date };
 
@@ -279,6 +281,7 @@ export default function HomeView() {
       duration: Toast.durations.LONG,
       position: Toast.positions.TOP,
     });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   async function openNextSnap() {

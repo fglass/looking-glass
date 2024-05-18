@@ -49,10 +49,7 @@ export default function SettingsView({
           Push Token: {pushToken.slice(18, -1)}
         </Text>
         <Text style={styles.smallText}>
-          Last Snap LM: {lastSnap.LastModified?.toISOString()}
-        </Text>
-        <Text style={styles.smallText}>
-          Last Snap Key: {lastSnap.key ?? "null"}
+          Last Snap: {lastSnap.key ?? "null"}
         </Text>
       </View>
     </GestureDetector>

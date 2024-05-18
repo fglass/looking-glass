@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { SnapView } from "./SnapView";
 import { getSnapUrl, getSnaps } from "../data-access/s3";
@@ -77,7 +77,11 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
       >
         {snap.key.includes(HIDDEN_SNAP_KEY) ? (
           <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }}>
-            <MaterialIcons name="lock" size={70} color="yellow" />
+            <MaterialCommunityIcons
+              name="eye-off-outline"
+              size={70}
+              color="yellow"
+            />
           </Image>
         ) : (
           <Image

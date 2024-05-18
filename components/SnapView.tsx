@@ -74,7 +74,13 @@ export const SnapView = ({
         />
         <Group layer>
           <Fill color="silver" />
-          <TextBlob x={100} y={win.height / 2} blob={label} color="lightgrey" />
+          <TextBlob
+            x={100}
+            y={win.height / 2}
+            blob={label}
+            color="white"
+            opacity={0.25}
+          />
           <Path
             path={scratchPath}
             style={"stroke"}
