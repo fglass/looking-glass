@@ -1,14 +1,18 @@
 import { useState, useRef, useEffect } from "react";
-import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
-import { Button, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { CameraView, CameraType } from "expo-camera";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { manipulateAsync, FlipType, SaveFormat } from "expo-image-manipulator";
 import Toast from "react-native-root-toast";
-import { useClientId, useLastSnap } from "../data-access/database";
+import {
+  useClientId,
+  useLastSnap,
+  useDisplayName,
+} from "../data-access/database";
 import {
   getSnapUrl,
   getSnaps,
-  getTokens,
+  getAllTokens,
   uploadSnap,
   uploadToken,
 } from "../data-access/s3";
@@ -28,21 +32,20 @@ import {
   removeNotificationSubscription,
   setBadgeCountAsync,
 } from "expo-notifications";
-import { Image } from "expo-image";
 import {
   registerForPushNotifications,
   sendPushNotifications,
 } from "../data-access/notification";
-import { HIDDEN_SNAP_KEY } from "../constants";
+import { getSnapKey, getTokenFromSnapKey, getTokenKey } from "../utils";
+import * as Device from "expo-device";
 import * as Haptics from "expo-haptics";
+import { SetupView } from "./SetupView";
 
-type Snap = { key: string; LastModified: Date };
+type Snap = { Key: string; LastModified: Date };
 
 export default function HomeView() {
-  // TODO: refactor
   const cameraRef = useRef<CameraView>(null);
   const [cameraType, setCameraType] = useState<CameraType>("back");
-  const [cameraPerms, requestCameraPerms] = useCameraPermissions();
 
   const [preview, setPreview] = useState<{ uri: string } | null>(null);
   const [openedSnap, setOpenedSnap] = useState<{
@@ -53,6 +56,7 @@ export default function HomeView() {
   const [showGallery, setShowGallery] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  const { displayName } = useDisplayName();
   const clientId = useClientId();
   const { lastSnap, setLastSnap } = useLastSnap();
 
@@ -67,27 +71,27 @@ export default function HomeView() {
     .onStart(goToGallery);
   const doubleTap = Gesture.Tap().numberOfTaps(2).onStart(toggleCameraType);
 
-  const [expoPushToken, setExpoPushToken] = useState("");
+  const [pushToken, setPushToken] = useState("");
   const notificationListener = useRef<Subscription>();
   const responseListener = useRef<Subscription>();
 
   useEffect(() => {
-    if (!clientId) {
+    if (!clientId || !Device.isDevice) {
       return;
     }
 
     console.log("Registering for notifications...");
     registerForPushNotifications()
       .then((token) => {
-        setExpoPushToken(token ?? "");
+        setPushToken(token ?? "");
         if (token) {
           console.log("Uploading token...");
-          uploadToken(`token|${clientId}|${token}|.txt`, token).then(() =>
+          uploadToken(getTokenKey(clientId, token), token).then(() =>
             console.log("Token upload successful")
           );
         }
       })
-      .catch((error: any) => setExpoPushToken(`${error}`));
+      .catch((error: any) => setPushToken(`${error}`));
 
     notificationListener.current = addNotificationReceivedListener((n) => {
       console.log("Notification received:", n);
@@ -110,8 +114,11 @@ export default function HomeView() {
   }, [clientId]);
 
   useEffect(() => {
-    const fetchNewSnaps = async () => {
-      const snaps = await getSnaps(lastSnap.key);
+    const fetchNewSnaps = async (
+      lastSnapKey: string | undefined,
+      lastOpenedDate: Date
+    ) => {
+      const snaps = await getSnaps(lastSnapKey);
       if (!snaps) {
         return;
       }
@@ -119,31 +126,31 @@ export default function HomeView() {
         .filter(
           (item) =>
             item.Key &&
-            item.LastModified &&
             (selfSend || !item.Key.includes(clientId)) &&
-            (lastSnap.LastModified === undefined ||
-              item.LastModified > lastSnap.LastModified)
+            item.LastModified &&
+            item.LastModified > lastOpenedDate
         )
         .map((item) => ({
-          // TODO: refactor -> Key?
-          key: item.Key!,
+          Key: item.Key!,
           LastModified: item.LastModified!,
         }));
       setPendingSnaps(pendingSnaps);
       await setBadgeCountAsync(pendingSnaps.length);
     };
-    if (clientId && checkForNewSnaps) {
+    if (checkForNewSnaps && clientId && lastSnap) {
       console.log("Checking for new snaps...");
-      fetchNewSnaps();
+      fetchNewSnaps(lastSnap.Key, lastSnap.LastModified);
       setCheckForNewSnaps(false);
     }
-  }, [
-    clientId,
-    selfSend,
-    checkForNewSnaps,
-    lastSnap.key,
-    lastSnap.LastModified,
-  ]);
+  }, [checkForNewSnaps, clientId, lastSnap, selfSend]);
+
+  if (displayName === undefined) {
+    return null;
+  }
+
+  if (!displayName) {
+    return <SetupView />;
+  }
 
   function goToSettings() {
     setShowSettings(true);
@@ -161,7 +168,7 @@ export default function HomeView() {
   if (showSettings) {
     return (
       <SettingsView
-        pushToken={expoPushToken}
+        pushToken={pushToken}
         selfSend={selfSend}
         setSelfSend={setSelfSend}
         onClose={() => setShowSettings(false)}
@@ -171,22 +178,6 @@ export default function HomeView() {
 
   if (showGallery) {
     return <GalleryView onClose={closeGallery} />;
-  }
-
-  // Camera permissions are still loading
-  if (!cameraPerms) {
-    return <View />;
-  }
-
-  if (!cameraPerms.granted) {
-    return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: "center" }}>
-          I need your permission to show the 📷
-        </Text>
-        <Button onPress={requestCameraPerms} title="Grant" />
-      </View>
-    );
   }
 
   if (preview) {
@@ -201,19 +192,15 @@ export default function HomeView() {
         key={openedSnap.key}
         snap={openedSnap}
         onReaction={async (reaction) => {
-          const tokens = await getTokens();
-          if (tokens) {
-            // TODO: only to sender
-            await sendPushNotifications({
-              tokens,
-              idToIgnore: !selfSend ? clientId : "",
-              notification: { title: reaction },
-            });
-            Toast.show(`${reaction} sent!`, {
-              duration: Toast.durations.LONG,
-              position: Toast.positions.TOP,
-            });
-          }
+          const senderToken = getTokenFromSnapKey(openedSnap.key);
+          await sendPushNotifications({
+            tokens: [senderToken],
+            notification: { title: displayName, body: reaction },
+          });
+          Toast.show(`${reaction} sent!`, {
+            duration: Toast.durations.LONG,
+            position: Toast.positions.TOP,
+          });
         }}
         onClose={closeOpenedSnap}
       />
@@ -257,22 +244,22 @@ export default function HomeView() {
     });
     closePreview();
 
-    // Upload snap
-    const now = new Date();
-    const key = `snap|${now.toISOString()}|${clientId}${hidden ? `|${HIDDEN_SNAP_KEY}` : ""}.jpg`;
-    const resp = await uploadSnap(preview.uri, key);
+    const resp = await uploadSnap(
+      getSnapKey(clientId, pushToken, hidden),
+      preview.uri
+    );
     console.log("Upload successful: ", resp);
 
-    // Send push notifications
-    const tokens = await getTokens();
+    const tokens = await getAllTokens();
     if (tokens) {
       await sendPushNotifications({
         tokens,
-        idToIgnore: !selfSend ? clientId : "",
         notification: {
-          title: hidden ? " New Snap 🔒" : "New Snap 🔍",
+          title: displayName,
+          body: "New Snap 🔍",
           badge: 1,
         },
+        idToIgnore: !selfSend ? clientId : "",
       });
     }
 
@@ -286,10 +273,10 @@ export default function HomeView() {
 
   async function openNextSnap() {
     const snap = pendingSnaps[0];
-    const url = await getSnapUrl(snap.key);
+    const url = await getSnapUrl(snap.Key);
 
     if (url) {
-      setOpenedSnap({ key: snap.key, uri: url });
+      setOpenedSnap({ key: snap.Key, uri: url });
       setPendingSnaps(pendingSnaps.slice(1));
       setLastSnap(snap);
     }
@@ -323,7 +310,7 @@ export default function HomeView() {
               onPress={openNextSnap}
               disabled={pendingSnaps.length === 0}
             >
-              <Text style={styles.text}>{pendingSnaps.length}</Text>
+              <Text style={styles.counterText}>{pendingSnaps.length}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.bottomContainer}>
@@ -381,7 +368,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "yellow",
   },
-  text: {
+  counterText: {
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",

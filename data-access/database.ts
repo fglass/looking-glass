@@ -8,7 +8,7 @@ export const initDatabase = async () => {
     console.log("Initialising database...");
     await insert("version", 1);
     await insert("clientId", generateGuid());
-    await insert("lastSnap", { key: undefined, LastModified: new Date() });
+    await insert("lastSnap", { Key: undefined, LastModified: new Date() });
   }
 };
 
@@ -24,6 +24,30 @@ export const useClientId = (): string => {
   return isLoading ? "" : data;
 };
 
+export const useDisplayName = (): {
+  displayName: string | undefined;
+  setDisplayName: (name: string) => void;
+} => {
+  const { isLoading, error, data } = useSelect("displayName", "");
+
+  if (error) {
+    console.error(error);
+  }
+
+  const queryClient = useQueryClient();
+  const setDisplayNameMutation = useMutation({
+    mutationFn: async (displayName: string) =>
+      await insert("displayName", displayName),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["displayName"] }),
+  });
+
+  return {
+    displayName: isLoading ? undefined : data,
+    setDisplayName: setDisplayNameMutation.mutate,
+  };
+};
+
 export const useLastSnap = () => {
   const { isLoading, error, data } = useSelect("lastSnap", {});
 
@@ -32,9 +56,9 @@ export const useLastSnap = () => {
   }
 
   const lastSnap = isLoading
-    ? {}
+    ? undefined
     : {
-        key: data?.key,
+        Key: data?.Key,
         LastModified: data?.LastModified
           ? new Date(data.LastModified)
           : new Date(),
@@ -42,7 +66,7 @@ export const useLastSnap = () => {
 
   const queryClient = useQueryClient();
   const setLastSnapMutation = useMutation({
-    mutationFn: async (snap: { key: string; LastModified: Date }) =>
+    mutationFn: async (snap: { Key: string; LastModified: Date }) =>
       await insert("lastSnap", snap),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["lastSnap"] }),
   });

@@ -1,5 +1,9 @@
 import { StyleSheet, Switch, Text, View } from "react-native";
-import { useClientId, useLastSnap } from "../data-access/database";
+import {
+  useClientId,
+  useLastSnap,
+  useDisplayName,
+} from "../data-access/database";
 import React from "react";
 import {
   Directions,
@@ -22,6 +26,7 @@ export default function SettingsView({
   const bucketRegion = process.env.EXPO_PUBLIC_S3_BUCKET_REGION ?? "err";
   const downFling = Gesture.Fling().direction(Directions.DOWN).onStart(onClose);
 
+  const { displayName } = useDisplayName();
   const clientId = useClientId();
   const { lastSnap } = useLastSnap();
 
@@ -41,15 +46,16 @@ export default function SettingsView({
           />
         </View>
         <Text style={styles.headerText}>Debug</Text>
-        <Text style={styles.smallText}>
-          Bucket: {bucket} ({bucketRegion})
-        </Text>
+        <Text style={styles.smallText}>Name: {displayName}</Text>
         <Text style={styles.smallText}>Client ID: {clientId}</Text>
         <Text style={styles.smallText}>
           Push Token: {pushToken.slice(18, -1)}
         </Text>
         <Text style={styles.smallText}>
-          Last Snap: {lastSnap.key ?? "null"}
+          Bucket: {bucket} ({bucketRegion})
+        </Text>
+        <Text style={styles.smallText}>
+          Last Snap: {lastSnap?.Key ?? "N/A"}
         </Text>
       </View>
     </GestureDetector>
