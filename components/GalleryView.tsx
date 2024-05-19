@@ -17,7 +17,7 @@ import {
   Gesture,
   GestureDetector,
 } from "react-native-gesture-handler";
-import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../constants";
+import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../utils";
 
 const SNAP_LIMIT = 20;
 const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;

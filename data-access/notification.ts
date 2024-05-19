@@ -62,7 +62,8 @@ function handleRegistrationError(errorMessage: string) {
 }
 
 type PushNotification = {
-  title: string;
+  title?: string;
+  body?: string;
   badge?: number;
 };
 
@@ -72,8 +73,8 @@ export async function sendPushNotifications({
   notification,
 }: {
   tokens: { Key?: string }[];
-  idToIgnore: string;
   notification: PushNotification;
+  idToIgnore?: string;
 }) {
   const messages: (PushNotification | { to: string; sound: string })[] = [];
 
@@ -81,7 +82,7 @@ export async function sendPushNotifications({
     if (t.Key) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const [_, clientId, token] = t.Key.split("|");
-      if (clientId !== idToIgnore) {
+      if (!idToIgnore || clientId !== idToIgnore) {
         console.log(`Sending notification to ${clientId} (${token})...`);
         messages.push({
           ...notification,

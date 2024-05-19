@@ -1,5 +1,4 @@
 import { Image } from "expo-image";
-import { useState } from "react";
 import {
   Dimensions,
   Platform,
@@ -9,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { HIDDEN_SNAP_KEY } from "../constants";
+import { HIDDEN_SNAP_KEY } from "../utils";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   Canvas,

@@ -45,7 +45,7 @@ export const getSnapUrl = (key: string) => {
   }
 };
 
-export const uploadSnap = async (uri: string, key: string) => {
+export const uploadSnap = async (key: string, uri: string) => {
   const imgResponse = await fetch(uri);
   const imgBuffer = await imgResponse.arrayBuffer();
 
@@ -63,7 +63,7 @@ export const uploadSnap = async (uri: string, key: string) => {
   }
 };
 
-export const getTokens = async () => {
+export const getAllTokens = async () => {
   const params: S3.Types.ListObjectsV2Request = {
     Bucket: BUCKET,
     Prefix: "token",
