@@ -34,7 +34,6 @@ export default function SettingsView({
     <GestureDetector gesture={downFling}>
       <View style={styles.container}>
         <Text style={styles.headerText}>Settings</Text>
-
         <View style={styles.settingsContainer}>
           <Text style={styles.text}>Self-Send</Text>
           <Switch

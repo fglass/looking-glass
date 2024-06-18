@@ -17,19 +17,34 @@ export const getSnaps = async (startAfter?: string) => {
   const params: S3.Types.ListObjectsV2Request = {
     Bucket: BUCKET,
     Prefix: "snap",
+    MaxKeys: 1000,
   };
 
   if (startAfter) {
     params.StartAfter = startAfter;
   }
 
-  try {
-    // TODO: paginate
-    const data = await s3.listObjectsV2(params).promise();
-    return data.Contents;
-  } catch (error) {
-    console.error("Error fetching snaps:", error);
+  const snaps = [];
+
+  while (true) {
+    try {
+      const data = await s3.listObjectsV2(params).promise();
+
+      if (data.Contents) {
+        snaps.push(...data.Contents);
+      }
+
+      if (!data.IsTruncated) {
+        break;
+      }
+
+      params.ContinuationToken = data.NextContinuationToken;
+    } catch (error) {
+      console.error("Error fetching snaps:", error);
+    }
   }
+
+  return snaps;
 };
 
 export const getSnapUrl = (key: string) => {
