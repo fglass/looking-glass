@@ -6,6 +6,7 @@ import {
   StyleSheet,
   FlatList,
   View,
+  ActivityIndicator,
 } from "react-native";
 import { Image } from "expo-image";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -19,7 +20,6 @@ import {
 } from "react-native-gesture-handler";
 import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../utils";
 
-const SNAP_LIMIT = 20;
 const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
 
 export default function GalleryView({ onClose }: { onClose: () => void }) {
@@ -43,14 +43,11 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         return [];
       }
 
-      const latestSnaps = snaps.reverse().slice(0, SNAP_LIMIT);
+      const latestSnaps = snaps.reverse();
 
-      return await Promise.all(
-        latestSnaps.map(async (item) => ({
-          key: item.Key,
-          uri: await getSnapUrl(item.Key ?? ""),
-        }))
-      );
+      return latestSnaps.map((item) => ({
+        key: item.Key,
+      }));
     },
     staleTime: 30 * 1000, // 30s
   });
@@ -69,11 +66,29 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     );
   }
 
-  const Thumbnail = ({ snap }: { snap: { key: string; uri: string } }) => {
+  const Thumbnail = ({ snap }: { snap: { key: string } }) => {
+    const {
+      isLoading,
+      error,
+      data: snapUri,
+    } = useQuery({
+      queryKey: ["fetchSnapUri", snap.key],
+      queryFn: async () => await getSnapUrl(snap.key ?? ""),
+      staleTime: Infinity,
+    });
+
+    if (isLoading || error || !snapUri) {
+      return (
+        <View style={styles.thumbnailContainer}>
+          <ActivityIndicator style={styles.thumbnail} />
+        </View>
+      );
+    }
+
     return (
       <TouchableHighlight
         style={styles.thumbnailContainer}
-        onPress={() => setOpenedSnap(snap)}
+        onPress={() => setOpenedSnap({ key: snap.key, uri: snapUri })}
       >
         {snap.key.includes(HIDDEN_SNAP_KEY) ? (
           <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }}>
@@ -86,7 +101,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         ) : (
           <Image
             style={styles.thumbnail}
-            source={{ uri: snap.uri, cacheKey: snap.key }}
+            source={{ uri: snapUri, cacheKey: snap.key }}
             cachePolicy="memory-disk"
           />
         )}
