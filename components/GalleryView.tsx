@@ -21,6 +21,8 @@ import {
 import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../utils";
 
 const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
+const THUMBNAIL_HEIGHT = 200;
+const N_COLUMNS = 2;
 
 export default function GalleryView({ onClose }: { onClose: () => void }) {
   const leftFling = Gesture.Fling().direction(Directions.LEFT).onStart(onClose);
@@ -28,6 +30,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     key: string;
     uri: string;
   } | null>(null);
+  const [scrollIdx, setScrollIdx] = useState(0);
 
   const {
     isLoading,
@@ -66,7 +69,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     );
   }
 
-  const Thumbnail = ({ snap }: { snap: { key: string } }) => {
+  const Thumbnail = ({ idx, snap }: { idx: number; snap: { key: string } }) => {
     const {
       isLoading,
       error,
@@ -88,7 +91,10 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     return (
       <TouchableHighlight
         style={styles.thumbnailContainer}
-        onPress={() => setOpenedSnap({ key: snap.key, uri: snapUri })}
+        onPress={() => {
+          setOpenedSnap({ key: snap.key, uri: snapUri });
+          setScrollIdx(Math.floor(idx / N_COLUMNS));
+        }}
       >
         {snap.key.includes(HIDDEN_SNAP_KEY) ? (
           <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }}>
@@ -120,9 +126,17 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     <GestureDetector gesture={leftFling}>
       <View style={styles.container}>
         <FlatList
-          numColumns={2}
+          numColumns={N_COLUMNS}
           data={gallery}
-          renderItem={({ item }) => <Thumbnail snap={item} />}
+          renderItem={({ item, index }) => (
+            <Thumbnail idx={index} snap={item} />
+          )}
+          initialScrollIndex={scrollIdx}
+          getItemLayout={(data, index) => ({
+            length: THUMBNAIL_HEIGHT,
+            offset: THUMBNAIL_HEIGHT * index,
+            index,
+          })}
         />
         <View style={styles.navbar}>
           <TouchableOpacity onPress={onClose}>
@@ -151,6 +165,7 @@ const styles = StyleSheet.create({
   },
   thumbnail: {
     aspectRatio: 1,
+    height: THUMBNAIL_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
   },
