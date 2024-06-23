@@ -64,6 +64,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
       <SnapView
         key={openedSnap.key}
         snap={openedSnap}
+        displayDate={true}
         onClose={() => setOpenedSnap(null)}
       />
     );
