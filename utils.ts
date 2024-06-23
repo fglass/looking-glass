@@ -19,3 +19,8 @@ export const getTokenFromSnapKey = (key: string) => {
   const token = parts[3];
   return { Key: getTokenKey(clientId, token) };
 };
+
+export const getDateTimeFromSnapKey = (key: string) => {
+  const parts = key.split("|");
+  return new Date(parts[1]);
+};

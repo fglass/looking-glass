@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { HIDDEN_SNAP_KEY } from "../utils";
+import { HIDDEN_SNAP_KEY, getDateTimeFromSnapKey } from "../utils";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   Canvas,
@@ -28,10 +28,12 @@ const EMOJI_REACTIONS = ["❤️", "👀", "😂", "🙁"];
 
 export const SnapView = ({
   snap,
+  displayDate,
   onReaction,
   onClose,
 }: {
   snap: { key: string; uri: string };
+  displayDate?: boolean;
   onReaction?: (reaction: string) => void;
   onClose: () => void;
 }) => {
@@ -109,6 +111,17 @@ export const SnapView = ({
             )}
           </TouchableHighlight>
         </View>
+        {displayDate && (
+          <View style={styles.dateContainer}>
+            <Text style={styles.dateText}>
+              {getDateTimeFromSnapKey(snap.key).toLocaleString("default", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </Text>
+          </View>
+        )}
         {onReaction && (
           <View style={styles.reactionsContainer}>
             {EMOJI_REACTIONS.map((emoji) => (
@@ -149,6 +162,19 @@ const styles = StyleSheet.create({
   },
   revealText: {
     fontSize: 24,
+    color: "white",
+    textAlign: "center",
+    margin: "auto",
+  },
+  dateContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    paddingTop: 40,
+    paddingLeft: 15,
+  },
+  dateText: {
+    fontSize: 16,
     color: "white",
     textAlign: "center",
     margin: "auto",
