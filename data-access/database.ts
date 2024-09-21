@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-export const initDatabase = async () => {
+export const initDatabase = async (): Promise<boolean> => {
   // await AsyncStorage.clear();
   const version = await select("version");
   if (version == null) {
@@ -9,7 +9,9 @@ export const initDatabase = async () => {
     await insert("version", 1);
     await insert("clientId", generateGuid());
     await insert("lastSnap", { Key: undefined, LastModified: new Date() });
+    return true;
   }
+  return false;
 };
 
 /* Hooks */

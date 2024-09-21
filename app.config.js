@@ -1,18 +1,9 @@
-const IS_DEV = process.env.APP_VARIANT === "development";
-const IS_PREVIEW = process.env.APP_VARIANT === "preview";
 const BUNDLE_IDENTIFIER = process.env.BUNDLE_IDENTIFIER;
+const APP_VARIANT = process.env.APP_VARIANT;
+const IS_DEV = APP_VARIANT === "development";
+const IS_PREVIEW = APP_VARIANT === "preview";
 
-const getUniqueIdentifier = () => {
-  if (IS_DEV) {
-    return `${BUNDLE_IDENTIFIER}.dev`;
-  }
-
-  if (IS_PREVIEW) {
-    return `${BUNDLE_IDENTIFIER}.preview`;
-  }
-
-  return BUNDLE_IDENTIFIER;
-};
+const getUniqueIdentifier = () => `${BUNDLE_IDENTIFIER}.${APP_VARIANT}`;
 
 const getIcon = () => {
   if (IS_DEV || IS_PREVIEW) {
