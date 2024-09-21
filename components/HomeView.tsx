@@ -56,8 +56,8 @@ export default function HomeView() {
   const [showGallery, setShowGallery] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  const { displayName } = useDisplayName();
   const clientId = useClientId();
+  const { displayName } = useDisplayName();
   const { lastSnap, setLastSnap } = useLastSnap();
 
   const [checkForNewSnaps, setCheckForNewSnaps] = useState(true);
