@@ -11,7 +11,7 @@ export default function App() {
   useEffect(() => {
     const init = async () => {
       if (await initDatabase()) {
-        queryClient.invalidateQueries();
+        await queryClient.invalidateQueries();
       }
     };
     init();
