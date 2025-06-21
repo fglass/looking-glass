@@ -293,7 +293,12 @@ export default function HomeView() {
   return (
     <GestureDetector gesture={Gesture.Race(rightFling, upFling, doubleTap)}>
       <View style={styles.container}>
-        <CameraView ref={cameraRef} style={styles.camera} facing={cameraType} />
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing={cameraType}
+          selectedLens={cameraType === "front" ? "Front Camera" : "Back Camera"} // Force to non-wide lens
+        />
         <View style={styles.overlay}>
           <View style={styles.topContainer}>
             <TouchableOpacity
