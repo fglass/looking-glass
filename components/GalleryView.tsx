@@ -85,7 +85,6 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     uri: string;
   } | null>(null);
   const [scrollIdx, setScrollIdx] = useState(0);
-
   const {
     isLoading,
     error,
@@ -120,14 +119,20 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
   const handleSnapPress = useCallback(
     (key: string, uri: string, idx: number) => {
       setOpenedSnap({ key, uri });
-      setScrollIdx(Math.floor(idx / 2) * 2);
+      const rowIndex = Math.floor(idx / N_COLUMNS);
+      setScrollIdx(rowIndex);
     },
     []
   );
 
   const renderItem = useCallback(
     ({ item, index }: { item: { key: string }; index: number }) => (
-      <Thumbnail idx={index} snap={item} onSnapPress={handleSnapPress} />
+      <Thumbnail
+        key={item.key}
+        idx={index}
+        snap={item}
+        onSnapPress={handleSnapPress}
+      />
     ),
     [handleSnapPress]
   );
@@ -157,22 +162,15 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
           data={gallery}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
-          removeClippedSubviews={true}
-          windowSize={10}
+          windowSize={3} // Current + screens above & below
+          initialNumToRender={10}
           maxToRenderPerBatch={10}
-          updateCellsBatchingPeriod={50}
           initialScrollIndex={scrollIdx}
-          getItemLayout={(_data, index) => {
-            const rowIndex = Math.floor(index / N_COLUMNS);
-            return {
-              length: THUMBNAIL_HEIGHT,
-              offset: THUMBNAIL_HEIGHT * rowIndex,
-              index,
-            };
-          }}
-          onScrollToIndexFailed={(info) => {
-            console.warn("Failed to scroll to index:", info);
-          }}
+          getItemLayout={(_data, index) => ({
+            length: THUMBNAIL_HEIGHT,
+            offset: THUMBNAIL_HEIGHT * index,
+            index,
+          })}
         />
         <View style={styles.navbar}>
           <TouchableOpacity onPress={onClose}>

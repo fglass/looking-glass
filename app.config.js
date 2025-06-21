@@ -39,6 +39,10 @@ export default {
       "expo-camera",
       { cameraPermission: "Allow $(PRODUCT_NAME) to access your camera" },
     ],
+    [
+      "expo-media-library",
+      { savePhotosPermission: "Allow $(PRODUCT_NAME) to save photos." },
+    ],
     ["expo-notifications", { enableBackgroundRemoteNotifications: true }],
   ],
   extra: { eas: { projectId: process.env.EAS_PROJECT_ID } },
