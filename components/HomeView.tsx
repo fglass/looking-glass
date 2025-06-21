@@ -2,7 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { CameraView, CameraType } from "expo-camera";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { manipulateAsync, FlipType, SaveFormat } from "expo-image-manipulator";
+import {
+  manipulateAsync,
+  FlipType,
+  SaveFormat,
+  ImageManipulator,
+} from "expo-image-manipulator";
 import Toast from "react-native-root-toast";
 import {
   useClientId,
@@ -27,10 +32,8 @@ import {
 } from "react-native-gesture-handler";
 import {
   EventSubscription,
-  Subscription,
   addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
-  removeNotificationSubscription,
   setBadgeCountAsync,
 } from "expo-notifications";
 import {
@@ -124,10 +127,8 @@ export default function HomeView() {
     );
 
     return () => {
-      notificationListener.current &&
-        removeNotificationSubscription(notificationListener.current);
-      responseListener.current &&
-        removeNotificationSubscription(responseListener.current);
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
     };
   }, [clientId]);
 
@@ -220,22 +221,18 @@ export default function HomeView() {
       return;
     }
 
-    const picture = await cameraRef.current.takePictureAsync();
+    const snap = await cameraRef.current.takePictureAsync({
+      quality: 0.5,
+      imageType: "jpg",
+      mirror: true,
+    });
 
-    if (!picture) {
+    if (!snap) {
       console.error("No snap taken");
       return;
     }
 
-    const transformedPicture = await manipulateAsync(
-      picture.uri,
-      cameraType === "front"
-        ? [{ rotate: 180 }, { flip: FlipType.Vertical }]
-        : [],
-      { compress: 0.5, format: SaveFormat.JPEG }
-    );
-
-    setPreview(transformedPicture);
+    setPreview({ uri: snap.uri });
   }
 
   async function sendSnap({ hidden }: { hidden: boolean }) {
@@ -246,7 +243,7 @@ export default function HomeView() {
 
     console.log("Sending snap...");
     const prevToast = Toast.show("Sending snap...", {
-      duration: Toast.durations.LONG,
+      duration: 60_000,
       position: Toast.positions.TOP,
     });
     closePreview();

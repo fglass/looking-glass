@@ -5,10 +5,7 @@ const s3 = new S3({
   secretAccessKey: process.env.EXPO_PUBLIC_AWS_SECRET_KEY,
   region: process.env.EXPO_PUBLIC_S3_BUCKET_REGION,
   maxRetries: 3,
-  httpOptions: {
-    connectTimeout: 5000,
-    timeout: 10000,
-  },
+  httpOptions: { connectTimeout: 5000, timeout: 60_000 },
 });
 
 const BUCKET = process.env.EXPO_PUBLIC_S3_BUCKET_NAME ?? "";
@@ -48,10 +45,7 @@ export const getSnaps = async (startAfter?: string) => {
 };
 
 export const getSnapUrl = (key: string) => {
-  const params = {
-    Bucket: BUCKET,
-    Key: key,
-  };
+  const params = { Bucket: BUCKET, Key: key };
 
   try {
     return s3.getSignedUrlPromise("getObject", params);

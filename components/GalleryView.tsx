@@ -116,7 +116,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
   const handleSnapPress = useCallback(
     (key: string, uri: string, idx: number) => {
       setOpenedSnap({ key, uri });
-      setScrollIdx(idx);
+      setScrollIdx(Math.floor(idx / 2) * 2);
     },
     []
   );
