@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   Text,
   TouchableHighlight,
@@ -24,6 +24,57 @@ const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
 const THUMBNAIL_HEIGHT = 200;
 const N_COLUMNS = 2;
 
+const Thumbnail = ({
+  idx,
+  snap,
+  onSnapPress,
+}: {
+  idx: number;
+  snap: { key: string };
+  onSnapPress: (key: string, uri: string, idx: number) => void;
+}) => {
+  const {
+    isLoading,
+    error,
+    data: snapUri,
+  } = useQuery({
+    queryKey: ["fetchSnapUri", snap.key],
+    queryFn: async () => await getSnapUrl(snap.key ?? ""),
+    staleTime: Infinity,
+  });
+
+  if (isLoading || error || !snapUri) {
+    return (
+      <View style={styles.thumbnailContainer}>
+        <ActivityIndicator style={styles.thumbnail} />
+      </View>
+    );
+  }
+
+  return (
+    <TouchableHighlight
+      style={styles.thumbnailContainer}
+      onPress={() => onSnapPress(snap.key, snapUri, idx)}
+    >
+      {snap.key.includes(HIDDEN_SNAP_KEY) ? (
+        <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }}>
+          <MaterialCommunityIcons
+            name="eye-off-outline"
+            size={70}
+            color="yellow"
+          />
+        </Image>
+      ) : (
+        <Image
+          style={styles.thumbnail}
+          source={{ uri: snapUri, cacheKey: snap.key }}
+          cachePolicy="memory-disk"
+        />
+      )}
+    </TouchableHighlight>
+  );
+};
+
 export default function GalleryView({ onClose }: { onClose: () => void }) {
   const leftFling = Gesture.Fling().direction(Directions.LEFT).onStart(onClose);
   const [openedSnap, setOpenedSnap] = useState<{
@@ -48,12 +99,36 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
 
       const latestSnaps = snaps.reverse();
 
-      return latestSnaps.map((item) => ({
-        key: item.Key,
-      }));
+      return latestSnaps.map((item) => ({ key: item.Key }));
     },
     staleTime: 30 * 1000, // 30s
   });
+
+  const streakDurationDays = useMemo(() => {
+    const streakStart = STREAK_START_DATE
+      ? new Date(STREAK_START_DATE)
+      : new Date();
+    return Math.floor(
+      (Date.now() - new Date(streakStart).getTime()) / (1000 * 60 * 60 * 24)
+    );
+  }, []);
+
+  const handleSnapPress = useCallback(
+    (key: string, uri: string, idx: number) => {
+      setOpenedSnap({ key, uri });
+      setScrollIdx(idx);
+    },
+    []
+  );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: { key: string }; index: number }) => (
+      <Thumbnail idx={index} snap={item} onSnapPress={handleSnapPress} />
+    ),
+    [handleSnapPress]
+  );
+
+  const keyExtractor = useCallback((item: { key: string }) => item.key, []);
 
   if (isLoading || error) {
     return <View />;
@@ -70,74 +145,30 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     );
   }
 
-  const Thumbnail = ({ idx, snap }: { idx: number; snap: { key: string } }) => {
-    const {
-      isLoading,
-      error,
-      data: snapUri,
-    } = useQuery({
-      queryKey: ["fetchSnapUri", snap.key],
-      queryFn: async () => await getSnapUrl(snap.key ?? ""),
-      staleTime: Infinity,
-    });
-
-    if (isLoading || error || !snapUri) {
-      return (
-        <View style={styles.thumbnailContainer}>
-          <ActivityIndicator style={styles.thumbnail} />
-        </View>
-      );
-    }
-
-    return (
-      <TouchableHighlight
-        style={styles.thumbnailContainer}
-        onPress={() => {
-          setOpenedSnap({ key: snap.key, uri: snapUri });
-          setScrollIdx(Math.floor(idx / N_COLUMNS));
-        }}
-      >
-        {snap.key.includes(HIDDEN_SNAP_KEY) ? (
-          <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }}>
-            <MaterialCommunityIcons
-              name="eye-off-outline"
-              size={70}
-              color="yellow"
-            />
-          </Image>
-        ) : (
-          <Image
-            style={styles.thumbnail}
-            source={{ uri: snapUri, cacheKey: snap.key }}
-            cachePolicy="memory-disk"
-          />
-        )}
-      </TouchableHighlight>
-    );
-  };
-
-  const streakStart = STREAK_START_DATE
-    ? new Date(STREAK_START_DATE)
-    : new Date();
-  const streakDurationDays = Math.floor(
-    (Date.now() - new Date(streakStart).getTime()) / (1000 * 60 * 60 * 24)
-  );
-
   return (
     <GestureDetector gesture={leftFling}>
       <View style={styles.container}>
         <FlatList
           numColumns={N_COLUMNS}
           data={gallery}
-          renderItem={({ item, index }) => (
-            <Thumbnail idx={index} snap={item} />
-          )}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          removeClippedSubviews={true}
+          windowSize={10}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
           initialScrollIndex={scrollIdx}
-          getItemLayout={(data, index) => ({
-            length: THUMBNAIL_HEIGHT,
-            offset: THUMBNAIL_HEIGHT * index,
-            index,
-          })}
+          getItemLayout={(_data, index) => {
+            const rowIndex = Math.floor(index / N_COLUMNS);
+            return {
+              length: THUMBNAIL_HEIGHT,
+              offset: THUMBNAIL_HEIGHT * rowIndex,
+              index,
+            };
+          }}
+          onScrollToIndexFailed={(info) => {
+            console.warn("Failed to scroll to index:", info);
+          }}
         />
         <View style={styles.navbar}>
           <TouchableOpacity onPress={onClose}>
@@ -157,13 +188,8 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#242424",
-  },
-  thumbnailContainer: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: "#242424" },
+  thumbnailContainer: { flex: 1 },
   thumbnail: {
     aspectRatio: 1,
     height: THUMBNAIL_HEIGHT,

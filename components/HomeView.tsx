@@ -26,6 +26,7 @@ import {
   GestureDetector,
 } from "react-native-gesture-handler";
 import {
+  EventSubscription,
   Subscription,
   addNotificationReceivedListener,
   addNotificationResponseReceivedListener,
@@ -40,6 +41,7 @@ import { getSnapKey, getTokenFromSnapKey, getTokenKey } from "../utils";
 import * as Device from "expo-device";
 import * as Haptics from "expo-haptics";
 import { SetupView } from "./SetupView";
+import { runOnJS } from "react-native-reanimated";
 
 type Snap = { Key: string; LastModified: Date };
 
@@ -63,17 +65,33 @@ export default function HomeView() {
   const [checkForNewSnaps, setCheckForNewSnaps] = useState(true);
   const [pendingSnaps, setPendingSnaps] = useState<Snap[]>([]);
 
+  const [pushToken, setPushToken] = useState("");
+  const notificationListener = useRef<EventSubscription | null>(null);
+  const responseListener = useRef<EventSubscription | null>(null);
+
+  function goToSettings() {
+    setShowSettings(true);
+  }
+
+  function goToGallery() {
+    setShowGallery(true);
+  }
+
+  function toggleCameraType() {
+    setCameraType((current) => (current === "back" ? "front" : "back"));
+  }
+
   const upFling = Gesture.Fling()
     .direction(Directions.UP)
-    .onStart(goToSettings);
+    .onStart(() => runOnJS(goToSettings)());
+
   const rightFling = Gesture.Fling()
     .direction(Directions.RIGHT)
-    .onStart(goToGallery);
-  const doubleTap = Gesture.Tap().numberOfTaps(2).onStart(toggleCameraType);
+    .onStart(() => runOnJS(goToGallery)());
 
-  const [pushToken, setPushToken] = useState("");
-  const notificationListener = useRef<Subscription>();
-  const responseListener = useRef<Subscription>();
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onStart(() => runOnJS(toggleCameraType)());
 
   useEffect(() => {
     if (!clientId || !Device.isDevice) {
@@ -130,10 +148,7 @@ export default function HomeView() {
             item.LastModified &&
             item.LastModified > lastOpenedDate
         )
-        .map((item) => ({
-          Key: item.Key!,
-          LastModified: item.LastModified!,
-        }));
+        .map((item) => ({ Key: item.Key!, LastModified: item.LastModified! }));
       setPendingSnaps(pendingSnaps);
       await setBadgeCountAsync(pendingSnaps.length);
     };
@@ -150,14 +165,6 @@ export default function HomeView() {
 
   if (!displayName) {
     return <SetupView />;
-  }
-
-  function goToSettings() {
-    setShowSettings(true);
-  }
-
-  function goToGallery() {
-    setShowGallery(true);
   }
 
   function closeGallery() {
@@ -254,11 +261,7 @@ export default function HomeView() {
     if (tokens) {
       await sendPushNotifications({
         tokens,
-        notification: {
-          title: displayName,
-          body: "New Snap 🔍",
-          badge: 1,
-        },
+        notification: { title: displayName, body: "New Snap 🔍", badge: 1 },
         idToIgnore: !selfSend ? clientId : "",
       });
     }
@@ -296,10 +299,6 @@ export default function HomeView() {
     }
   }
 
-  function toggleCameraType() {
-    setCameraType((current) => (current === "back" ? "front" : "back"));
-  }
-
   return (
     <GestureDetector gesture={Gesture.Race(rightFling, upFling, doubleTap)}>
       <View style={styles.container}>
@@ -335,10 +334,7 @@ export default function HomeView() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-  },
+  container: { flex: 1, justifyContent: "center" },
   topContainer: {
     flex: 1,
     alignSelf: "flex-end",
@@ -351,17 +347,9 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     margin: 64,
   },
-  camera: {
-    flex: 1,
-  },
-  fullImage: {
-    flex: 1,
-  },
-  button: {
-    flex: 1,
-    alignSelf: "flex-end",
-    alignItems: "center",
-  },
+  camera: { flex: 1 },
+  fullImage: { flex: 1 },
+  button: { flex: 1, alignSelf: "flex-end", alignItems: "center" },
   counter: {
     minWidth: 37,
     padding: 5,
