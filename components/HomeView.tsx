@@ -2,12 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { CameraView, CameraType } from "expo-camera";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
-import {
-  manipulateAsync,
-  FlipType,
-  SaveFormat,
-  ImageManipulator,
-} from "expo-image-manipulator";
 import Toast from "react-native-root-toast";
 import {
   useClientId,
@@ -299,7 +293,8 @@ export default function HomeView() {
   return (
     <GestureDetector gesture={Gesture.Race(rightFling, upFling, doubleTap)}>
       <View style={styles.container}>
-        <CameraView ref={cameraRef} style={styles.camera} facing={cameraType}>
+        <CameraView ref={cameraRef} style={styles.camera} facing={cameraType} />
+        <View style={styles.overlay}>
           <View style={styles.topContainer}>
             <TouchableOpacity
               style={styles.counter}
@@ -324,14 +319,22 @@ export default function HomeView() {
               <MaterialIcons name="flip-camera-ios" size={42} color="white" />
             </TouchableOpacity>
           </View>
-        </CameraView>
+        </View>
       </View>
     </GestureDetector>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center" },
+  container: { flex: 1 },
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "transparent",
+  },
   topContainer: {
     flex: 1,
     alignSelf: "flex-end",

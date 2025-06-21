@@ -57,13 +57,16 @@ const Thumbnail = ({
       onPress={() => onSnapPress(snap.key, snapUri, idx)}
     >
       {snap.key.includes(HIDDEN_SNAP_KEY) ? (
-        <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }}>
-          <MaterialCommunityIcons
-            name="eye-off-outline"
-            size={70}
-            color="yellow"
-          />
-        </Image>
+        <View style={styles.thumbnail}>
+          <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }} />
+          <View style={styles.iconOverlay}>
+            <MaterialCommunityIcons
+              name="eye-off-outline"
+              size={70}
+              color="yellow"
+            />
+          </View>
+        </View>
       ) : (
         <Image
           style={styles.thumbnail}
@@ -98,8 +101,9 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
       }
 
       const latestSnaps = snaps.reverse();
-
-      return latestSnaps.map((item) => ({ key: item.Key }));
+      return latestSnaps
+        .filter((item) => item.Key)
+        .map((item) => ({ key: item.Key! }));
     },
     staleTime: 30 * 1000, // 30s
   });
@@ -193,6 +197,15 @@ const styles = StyleSheet.create({
   thumbnail: {
     aspectRatio: 1,
     height: THUMBNAIL_HEIGHT,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: "center",
     alignItems: "center",
   },

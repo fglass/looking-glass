@@ -26,10 +26,7 @@ export default {
     backgroundColor: "#ffffff",
   },
   assetBundlePatterns: ["**/*"],
-  ios: {
-    supportsTablet: true,
-    bundleIdentifier: getUniqueIdentifier(),
-  },
+  ios: { supportsTablet: true, bundleIdentifier: getUniqueIdentifier() },
   android: {
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
@@ -37,12 +34,12 @@ export default {
     },
     package: getUniqueIdentifier(),
   },
-  extra: {
-    eas: {
-      projectId: process.env.EAS_PROJECT_ID,
-    },
-  },
-  infoPlist: {
-    RCTAsyncStorageExcludeFromBackup: false,
-  },
+  plugins: [
+    [
+      "expo-camera",
+      { cameraPermission: "Allow $(PRODUCT_NAME) to access your camera" },
+    ],
+  ],
+  extra: { eas: { projectId: process.env.EAS_PROJECT_ID } },
+  infoPlist: { RCTAsyncStorageExcludeFromBackup: false },
 };
