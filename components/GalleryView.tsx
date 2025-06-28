@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import {
   Text,
   TouchableHighlight,
@@ -24,59 +24,65 @@ const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
 const THUMBNAIL_HEIGHT = 200;
 const N_COLUMNS = 2;
 
-const Thumbnail = ({
-  idx,
-  snap,
-  onSnapPress,
-}: {
-  idx: number;
-  snap: { key: string };
-  onSnapPress: (key: string, uri: string, idx: number) => void;
-}) => {
-  const {
-    isLoading,
-    error,
-    data: snapUri,
-  } = useQuery({
-    queryKey: ["fetchSnapUri", snap.key],
-    queryFn: async () => await getSnapUrl(snap.key ?? ""),
-    staleTime: Infinity,
-  });
+const Thumbnail = memo(
+  ({
+    idx,
+    snap,
+    onSnapPress,
+  }: {
+    idx: number;
+    snap: { key: string };
+    onSnapPress: (key: string, uri: string, idx: number) => void;
+  }) => {
+    const {
+      isLoading,
+      error,
+      data: snapUri,
+    } = useQuery({
+      queryKey: ["fetchSnapUri", snap.key],
+      queryFn: async () => await getSnapUrl(snap.key ?? ""),
+      staleTime: Infinity,
+      gcTime: Infinity,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    });
 
-  if (isLoading || error || !snapUri) {
+    if (isLoading || error || !snapUri) {
+      return (
+        <View style={styles.thumbnailContainer}>
+          <ActivityIndicator style={styles.thumbnail} />
+        </View>
+      );
+    }
+
     return (
-      <View style={styles.thumbnailContainer}>
-        <ActivityIndicator style={styles.thumbnail} />
-      </View>
+      <TouchableHighlight
+        style={styles.thumbnailContainer}
+        onPress={() => onSnapPress(snap.key, snapUri, idx)}
+      >
+        {snap.key.includes(HIDDEN_SNAP_KEY) ? (
+          <View style={styles.thumbnail}>
+            <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }} />
+            <View style={styles.iconOverlay}>
+              <MaterialCommunityIcons
+                name="eye-off-outline"
+                size={70}
+                color="yellow"
+              />
+            </View>
+          </View>
+        ) : (
+          <Image
+            style={styles.thumbnail}
+            source={{ uri: snapUri, cacheKey: snap.key }}
+            cachePolicy="memory-disk"
+          />
+        )}
+      </TouchableHighlight>
     );
   }
-
-  return (
-    <TouchableHighlight
-      style={styles.thumbnailContainer}
-      onPress={() => onSnapPress(snap.key, snapUri, idx)}
-    >
-      {snap.key.includes(HIDDEN_SNAP_KEY) ? (
-        <View style={styles.thumbnail}>
-          <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }} />
-          <View style={styles.iconOverlay}>
-            <MaterialCommunityIcons
-              name="eye-off-outline"
-              size={70}
-              color="yellow"
-            />
-          </View>
-        </View>
-      ) : (
-        <Image
-          style={styles.thumbnail}
-          source={{ uri: snapUri, cacheKey: snap.key }}
-          cachePolicy="memory-disk"
-        />
-      )}
-    </TouchableHighlight>
-  );
-};
+);
+Thumbnail.displayName = "Thumbnail";
 
 export default function GalleryView({ onClose }: { onClose: () => void }) {
   const leftFling = Gesture.Fling().direction(Directions.LEFT).onStart(onClose);
@@ -104,7 +110,6 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         .filter((item) => item.Key)
         .map((item) => ({ key: item.Key! }));
     },
-    staleTime: 30 * 1000, // 30s
   });
 
   const streakDurationDays = useMemo(() => {
@@ -143,17 +148,6 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     return <View />;
   }
 
-  if (openedSnap) {
-    return (
-      <SnapView
-        key={openedSnap.key}
-        snap={openedSnap}
-        displayDate={true}
-        onClose={() => setOpenedSnap(null)}
-      />
-    );
-  }
-
   return (
     <GestureDetector gesture={leftFling}>
       <View style={styles.container}>
@@ -184,6 +178,16 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
             </View>
           )}
         </View>
+        {openedSnap && (
+          <View style={styles.snapOverlay}>
+            <SnapView
+              key={openedSnap.key}
+              snap={openedSnap}
+              displayDate={true}
+              onClose={() => setOpenedSnap(null)}
+            />
+          </View>
+        )}
       </View>
     </GestureDetector>
   );
@@ -228,5 +232,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#242424",
     textAlign: "center",
+  },
+  snapOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
   },
 });
