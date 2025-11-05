@@ -23,11 +23,13 @@ import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../utils";
 
 const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
 const THUMBNAIL_HEIGHT = 200;
+const MONTH_HEADER_HEIGHT = 28;
 const N_COLUMNS = 2;
 
 type GalleryRow = {
+  id: string;
   header?: string;
-  snaps: Array<{ key: string }>;
+  snaps: ({ key: string } | null)[];
 };
 
 const Thumbnail = memo(
@@ -154,14 +156,34 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     },
   });
 
-  const galleryRows = useMemo(() => {
+  const { galleryRows, rowHeights, rowOffsets } = useMemo(() => {
     if (!gallerySnaps) {
-      return [];
+      return {
+        galleryRows: [] as GalleryRow[],
+        rowHeights: [] as number[],
+        rowOffsets: [] as number[],
+      };
     }
 
     const rows: GalleryRow[] = [];
+    const heights: number[] = [];
+    const offsets: number[] = [];
+
+    let runningOffset = 0;
     let currentMonthKey: string | null = null;
+
+    const monthRowCounts: Record<string, number> = {};
     let currentRow: GalleryRow | null = null;
+
+    const pushRow = (id: string, header?: string) => {
+      const height = THUMBNAIL_HEIGHT + (header ? MONTH_HEADER_HEIGHT : 0);
+      const row: GalleryRow = { id, header, snaps: [] };
+      rows.push(row);
+      offsets.push(runningOffset);
+      heights.push(height);
+      runningOffset += height;
+      return row;
+    };
 
     gallerySnaps.forEach((snap) => {
       const snapDate = getDateTimeFromSnapKey(snap.key);
@@ -174,22 +196,31 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
       const isNewMonth = monthKey !== currentMonthKey;
       if (isNewMonth) {
         currentMonthKey = monthKey;
-        currentRow = {
-          header: rows.length === 0 ? undefined : headerLabel,
-          snaps: [],
-        };
-        rows.push(currentRow);
+        const rowIndex = monthRowCounts[monthKey] ?? 0;
+        monthRowCounts[monthKey] = rowIndex;
+        const rowId = `${monthKey}-${rowIndex}`;
+        currentRow = pushRow(
+          rowId,
+          rows.length === 0 ? undefined : headerLabel
+        );
+        monthRowCounts[monthKey] = rowIndex + 1;
+      } else if (!currentRow || currentRow.snaps.length === N_COLUMNS) {
+        const rowIndex = monthRowCounts[monthKey] ?? 0;
+        const rowId = `${monthKey}-${rowIndex}`;
+        currentRow = pushRow(rowId);
+        monthRowCounts[monthKey] = rowIndex + 1;
       }
 
-      if (!currentRow || currentRow.snaps.length === N_COLUMNS) {
-        currentRow = { header: undefined, snaps: [] };
-        rows.push(currentRow);
-      }
-
-      currentRow.snaps.push({ key: snap.key });
+      currentRow?.snaps.push({ key: snap.key });
     });
 
-    return rows;
+    rows.forEach((row) => {
+      while (row.snaps.length < N_COLUMNS) {
+        row.snaps.push(null);
+      }
+    });
+
+    return { galleryRows: rows, rowHeights: heights, rowOffsets: offsets };
   }, [gallerySnaps]);
 
   const streakDurationDays = useMemo(() => {
@@ -206,49 +237,43 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
   }, []);
 
   const renderItem = useCallback(
-    ({ item, index }: { item: GalleryRow; index: number }) => {
-      const snapsWithPlaceholders: Array<{ key: string } | null> = [
-        ...item.snaps,
-      ];
-      while (snapsWithPlaceholders.length < N_COLUMNS) {
-        snapsWithPlaceholders.push(null);
-      }
-
-      return (
-        <View style={styles.rowContainer}>
-          {item.header && (
-            <View style={styles.monthHeader}>
-              <Text style={styles.monthHeaderText}>{item.header}</Text>
-            </View>
-          )}
-          <View style={styles.row}>
-            {snapsWithPlaceholders.map((snap, columnIdx) =>
-              snap ? (
-                <Thumbnail
-                  key={snap.key}
-                  snap={snap}
-                  onSnapPress={handleSnapPress}
-                />
-              ) : (
-                <View
-                  key={`placeholder-${index}-${columnIdx}`}
-                  style={[
-                    styles.thumbnailContainer,
-                    styles.thumbnailPlaceholder,
-                  ]}
-                />
-              )
-            )}
+    ({ item }: { item: GalleryRow }) => (
+      <View style={styles.rowContainer}>
+        {item.header && (
+          <View style={styles.monthHeader}>
+            <Text style={styles.monthHeaderText}>{item.header}</Text>
           </View>
+        )}
+        <View style={styles.row}>
+          {item.snaps.map((snap, columnIdx) =>
+            snap ? (
+              <Thumbnail
+                key={snap.key}
+                snap={snap}
+                onSnapPress={handleSnapPress}
+              />
+            ) : (
+              <View
+                key={`placeholder-${item.id}-${columnIdx}`}
+                style={styles.thumbnailPlaceholder}
+              />
+            )
+          )}
         </View>
-      );
-    },
+      </View>
+    ),
     [handleSnapPress]
   );
 
-  const keyExtractor = useCallback(
-    (_item: GalleryRow, index: number) => `row-${index}`,
-    []
+  const keyExtractor = useCallback((item: GalleryRow) => item.id, []);
+
+  const getItemLayout = useCallback(
+    (_: ArrayLike<GalleryRow> | null | undefined, index: number) => ({
+      length: rowHeights[index] ?? THUMBNAIL_HEIGHT,
+      offset: rowOffsets[index] ?? THUMBNAIL_HEIGHT * index,
+      index,
+    }),
+    [rowHeights, rowOffsets]
   );
 
   if (isLoading || error) {
@@ -262,9 +287,12 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
           data={galleryRows}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
-          windowSize={3} // Current + screens above & below
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
+          windowSize={5} // Current + screens above & below
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews
+          getItemLayout={getItemLayout}
         />
         <View style={styles.navbar}>
           <TouchableOpacity onPress={onClose}>
