@@ -22,6 +22,7 @@ import {
   notifyChange,
   useImage,
 } from "@shopify/react-native-skia";
+import { scheduleOnRN } from "react-native-worklets";
 import Animated, { useSharedValue } from "react-native-reanimated";
 
 const EMOJI_REACTIONS = ["❤️", "👀", "😂", "🙁"];
@@ -42,11 +43,13 @@ export const SnapView = ({
   const scratchPath = useSharedValue(Skia.Path.Make());
   const scratchHandler = Gesture.Pan()
     .onBegin((e) => {
+      "worklet";
       scratchPath.value.moveTo(e.x, e.y);
       scratchPath.value.lineTo(e.x, e.y);
       notifyChange(scratchPath);
     })
     .onUpdate((e) => {
+      "worklet";
       scratchPath.value.lineTo(e.x, e.y);
       notifyChange(scratchPath);
     });
@@ -96,49 +99,61 @@ export const SnapView = ({
     );
   };
 
+  const closeOnTap = Gesture.Tap()
+    .maxDistance(10)
+    .onEnd((_event, success) => {
+      "worklet";
+      if (success && hidden) {
+        scheduleOnRN(onClose);
+      }
+    });
+  const scratchGesture = Gesture.Simultaneous(closeOnTap, scratchHandler);
+
   return (
-    <GestureDetector gesture={scratchHandler}>
-      <Animated.View style={styles.container}>
-        <View style={styles.camera}>
-          <TouchableHighlight style={styles.imageContainer} onPress={onClose}>
-            {hidden ? (
+    <Animated.View style={styles.container}>
+      <View style={styles.camera}>
+        {hidden ? (
+          <GestureDetector gesture={scratchGesture}>
+            <View style={styles.imageContainer}>
               <ScratchCard />
-            ) : (
-              <Image
-                style={styles.fullImage}
-                source={{ uri: snap.uri, cacheKey: snap.key }}
-              />
-            )}
+            </View>
+          </GestureDetector>
+        ) : (
+          <TouchableHighlight style={styles.imageContainer} onPress={onClose}>
+            <Image
+              style={styles.fullImage}
+              source={{ uri: snap.uri, cacheKey: snap.key }}
+            />
           </TouchableHighlight>
+        )}
+      </View>
+      {displayDate && (
+        <View style={styles.dateContainer}>
+          <Text style={styles.dateText}>
+            {getDateTimeFromSnapKey(snap.key).toLocaleString("default", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </Text>
         </View>
-        {displayDate && (
-          <View style={styles.dateContainer}>
-            <Text style={styles.dateText}>
-              {getDateTimeFromSnapKey(snap.key).toLocaleString("default", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })}
-            </Text>
-          </View>
-        )}
-        {onReaction && (
-          <View style={styles.reactionsContainer}>
-            {EMOJI_REACTIONS.map((emoji) => (
-              <TouchableOpacity
-                key={emoji}
-                onPress={() => {
-                  onReaction?.(emoji);
-                  onClose();
-                }}
-              >
-                <Text style={styles.emoji}>{emoji}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </Animated.View>
-    </GestureDetector>
+      )}
+      {onReaction && (
+        <View style={styles.reactionsContainer}>
+          {EMOJI_REACTIONS.map((emoji) => (
+            <TouchableOpacity
+              key={emoji}
+              onPress={() => {
+                onReaction?.(emoji);
+                onClose();
+              }}
+            >
+              <Text style={styles.emoji}>{emoji}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </Animated.View>
   );
 };
 
