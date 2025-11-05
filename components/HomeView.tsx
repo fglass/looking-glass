@@ -14,6 +14,7 @@ import {
   getAllTokens,
   uploadSnap,
   uploadToken,
+  addSnapReactionTag,
 } from "../data-access/s3";
 import { SnapView } from "./SnapView";
 import { SnapPreview } from "./SnapPreview";
@@ -34,7 +35,12 @@ import {
   registerForPushNotifications,
   sendPushNotifications,
 } from "../data-access/notification";
-import { getSnapKey, getTokenFromSnapKey, getTokenKey } from "../utils";
+import {
+  getSnapKey,
+  getTokenFromSnapKey,
+  getTokenKey,
+  reactionTagFromEmoji,
+} from "../utils";
 import * as Device from "expo-device";
 import * as Haptics from "expo-haptics";
 import { SetupView } from "./SetupView";
@@ -203,6 +209,11 @@ export default function HomeView() {
             duration: Toast.durations.LONG,
             position: Toast.positions.TOP,
           });
+
+          const reactionKey = reactionTagFromEmoji(reaction);
+          if (reactionKey) {
+            await addSnapReactionTag(openedSnap.key, reactionKey);
+          }
         }}
         onClose={closeOpenedSnap}
       />

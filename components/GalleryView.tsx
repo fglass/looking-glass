@@ -12,7 +12,8 @@ import { Image } from "expo-image";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { SnapView } from "./SnapView";
-import { getSnapUrl, getSnaps } from "../data-access/s3";
+import { getSnapUrl, getSnaps, getSnapReactions } from "../data-access/s3";
+import { TAG_TO_EMOJI } from "../utils";
 import {
   Directions,
   Gesture,
@@ -46,6 +47,29 @@ const Thumbnail = memo(
       refetchOnMount: false,
       refetchOnWindowFocus: false,
     });
+    const { data: reactions } = useQuery({
+      queryKey: ["fetchSnapReactions", snap.key],
+      queryFn: async () => await getSnapReactions(snap.key ?? ""),
+      staleTime: 60_000,
+      gcTime: 60_000,
+      refetchOnWindowFocus: false,
+    });
+
+    const reactionEmojis = useMemo(() => {
+      if (!reactions) {
+        return [];
+      }
+      const seen = new Set<string>();
+      return reactions
+        .map((tag) => TAG_TO_EMOJI[tag] ?? tag)
+        .filter((emoji) => {
+          if (!emoji || seen.has(emoji)) {
+            return false;
+          }
+          seen.add(emoji);
+          return true;
+        });
+    }, [reactions]);
 
     if (isLoading || error || !snapUri) {
       return (
@@ -55,29 +79,45 @@ const Thumbnail = memo(
       );
     }
 
+    const isHidden = snap.key.includes(HIDDEN_SNAP_KEY);
+
     return (
       <TouchableHighlight
         style={styles.thumbnailContainer}
         onPress={() => onSnapPress(snap.key, snapUri, idx)}
       >
-        {snap.key.includes(HIDDEN_SNAP_KEY) ? (
-          <View style={styles.thumbnail}>
-            <Image style={styles.thumbnail} source={{ blurhash: BLUR_HASH }} />
-            <View style={styles.iconOverlay}>
-              <MaterialCommunityIcons
-                name="eye-off-outline"
-                size={70}
-                color="yellow"
+        <View style={styles.thumbnail}>
+          {isHidden ? (
+            <>
+              <Image
+                style={styles.thumbnail}
+                source={{ blurhash: BLUR_HASH }}
               />
+              <View style={styles.iconOverlay}>
+                <MaterialCommunityIcons
+                  name="eye-off-outline"
+                  size={70}
+                  color="yellow"
+                />
+              </View>
+            </>
+          ) : (
+            <Image
+              style={styles.thumbnail}
+              source={{ uri: snapUri, cacheKey: snap.key }}
+              cachePolicy="memory-disk"
+            />
+          )}
+          {reactionEmojis.length > 0 && (
+            <View pointerEvents="none" style={styles.reactionOverlay}>
+              {reactionEmojis.map((emoji) => (
+                <Text style={styles.reactionEmoji} key={emoji}>
+                  {emoji}
+                </Text>
+              ))}
             </View>
-          </View>
-        ) : (
-          <Image
-            style={styles.thumbnail}
-            source={{ uri: snapUri, cacheKey: snap.key }}
-            cachePolicy="memory-disk"
-          />
-        )}
+          )}
+        </View>
       </TouchableHighlight>
     );
   }
@@ -210,6 +250,17 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
+  },
+  reactionOverlay: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  reactionEmoji: {
+    fontSize: 32,
+    marginRight: 4,
   },
   navbar: {
     flex: 1,

@@ -24,3 +24,18 @@ export const getDateTimeFromSnapKey = (key: string) => {
   const parts = key.split("|");
   return new Date(parts[1]);
 };
+
+export const TAG_TO_EMOJI: Record<string, string> = {
+  heart: "❤️",
+  eyes: "👀",
+  laugh: "😂",
+  sad: "🙁",
+};
+
+export const REACTION_EMOJIS = Object.values(TAG_TO_EMOJI);
+
+export const EMOJI_TO_TAG = Object.fromEntries(
+  Object.entries(TAG_TO_EMOJI).map(([tag, emoji]) => [emoji, tag])
+);
+
+export const reactionTagFromEmoji = (emoji: string) => EMOJI_TO_TAG[emoji];

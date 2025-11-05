@@ -8,7 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { HIDDEN_SNAP_KEY, getDateTimeFromSnapKey } from "../utils";
+import {
+  HIDDEN_SNAP_KEY,
+  getDateTimeFromSnapKey,
+  REACTION_EMOJIS,
+} from "../utils";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   Canvas,
@@ -24,8 +28,6 @@ import {
 } from "@shopify/react-native-skia";
 import { scheduleOnRN } from "react-native-worklets";
 import Animated, { useSharedValue } from "react-native-reanimated";
-
-const EMOJI_REACTIONS = ["❤️", "👀", "😂", "🙁"];
 
 export const SnapView = ({
   snap,
@@ -140,7 +142,7 @@ export const SnapView = ({
       )}
       {onReaction && (
         <View style={styles.reactionsContainer}>
-          {EMOJI_REACTIONS.map((emoji) => (
+          {REACTION_EMOJIS.map((emoji) => (
             <TouchableOpacity
               key={emoji}
               onPress={() => {

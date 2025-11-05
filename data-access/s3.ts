@@ -72,6 +72,74 @@ export const uploadSnap = async (key: string, uri: string) => {
   }
 };
 
+export const getSnapReactions = async (key: string) => {
+  const params: S3.Types.GetObjectTaggingRequest = {
+    Bucket: BUCKET,
+    Key: key,
+  };
+
+  try {
+    const data = await s3.getObjectTagging(params).promise();
+    const reactionTag = data.TagSet?.find((tag) => tag.Key === "reaction");
+    if (!reactionTag?.Value) {
+      return [];
+    }
+
+    return reactionTag.Value.split(",")
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0);
+  } catch (error) {
+    console.error("Error fetching reactions:", error);
+    return [];
+  }
+};
+
+export const addSnapReactionTag = async (key: string, reaction: string) => {
+  const params: S3.Types.GetObjectTaggingRequest = {
+    Bucket: BUCKET,
+    Key: key,
+  };
+
+  try {
+    const currentTags = await s3.getObjectTagging(params).promise();
+    const existingReactionTag = currentTags.TagSet?.find(
+      (tag) => tag.Key === "reaction"
+    );
+
+    const reactions = existingReactionTag?.Value
+      ? existingReactionTag.Value.split(",")
+          .map((token) => token.trim())
+          .filter((token) => token.length > 0)
+      : [];
+
+    let updated = false;
+    if (!reactions.includes(reaction)) {
+      reactions.push(reaction);
+      updated = true;
+    }
+
+    if (!updated && existingReactionTag) {
+      return;
+    }
+
+    const reactionValue = reactions.join(",");
+    const updatedTagSet = [
+      ...(currentTags.TagSet?.filter((tag) => tag.Key !== "reaction") ?? []),
+      { Key: "reaction", Value: reactionValue },
+    ];
+
+    await s3
+      .putObjectTagging({
+        Bucket: BUCKET,
+        Key: key,
+        Tagging: { TagSet: updatedTagSet },
+      })
+      .promise();
+  } catch (error) {
+    console.error("Error updating reaction tag:", error);
+  }
+};
+
 export const getAllTokens = async () => {
   const params: S3.Types.ListObjectsV2Request = {
     Bucket: BUCKET,
