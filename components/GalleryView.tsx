@@ -13,7 +13,7 @@ import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { SnapView } from "./SnapView";
 import { getSnapUrl, getSnaps, getSnapReactions } from "../data-access/s3";
-import { TAG_TO_EMOJI } from "../utils";
+import { TAG_TO_EMOJI, getDateTimeFromSnapKey } from "../utils";
 import {
   Directions,
   Gesture,
@@ -25,15 +25,18 @@ const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
 const THUMBNAIL_HEIGHT = 200;
 const N_COLUMNS = 2;
 
+type GalleryRow = {
+  header?: string;
+  snaps: Array<{ key: string }>;
+};
+
 const Thumbnail = memo(
   ({
-    idx,
     snap,
     onSnapPress,
   }: {
-    idx: number;
     snap: { key: string };
-    onSnapPress: (key: string, uri: string, idx: number) => void;
+    onSnapPress: (key: string, uri: string) => void;
   }) => {
     const {
       isLoading,
@@ -84,7 +87,7 @@ const Thumbnail = memo(
     return (
       <TouchableHighlight
         style={styles.thumbnailContainer}
-        onPress={() => onSnapPress(snap.key, snapUri, idx)}
+        onPress={() => onSnapPress(snap.key, snapUri)}
       >
         <View style={styles.thumbnail}>
           {isHidden ? (
@@ -130,11 +133,10 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     key: string;
     uri: string;
   } | null>(null);
-  const [scrollIdx, setScrollIdx] = useState(0);
   const {
     isLoading,
     error,
-    data: gallery,
+    data: gallerySnaps,
   } = useQuery({
     queryKey: ["fetchGallery"],
     queryFn: async () => {
@@ -152,6 +154,44 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     },
   });
 
+  const galleryRows = useMemo(() => {
+    if (!gallerySnaps) {
+      return [];
+    }
+
+    const rows: GalleryRow[] = [];
+    let currentMonthKey: string | null = null;
+    let currentRow: GalleryRow | null = null;
+
+    gallerySnaps.forEach((snap) => {
+      const snapDate = getDateTimeFromSnapKey(snap.key);
+      const monthKey = `${snapDate.getFullYear()}-${snapDate.getMonth()}`;
+      const headerLabel = snapDate.toLocaleString("default", {
+        month: "long",
+        year: "numeric",
+      });
+
+      const isNewMonth = monthKey !== currentMonthKey;
+      if (isNewMonth) {
+        currentMonthKey = monthKey;
+        currentRow = {
+          header: rows.length === 0 ? undefined : headerLabel,
+          snaps: [],
+        };
+        rows.push(currentRow);
+      }
+
+      if (!currentRow || currentRow.snaps.length === N_COLUMNS) {
+        currentRow = { header: undefined, snaps: [] };
+        rows.push(currentRow);
+      }
+
+      currentRow.snaps.push({ key: snap.key });
+    });
+
+    return rows;
+  }, [gallerySnaps]);
+
   const streakDurationDays = useMemo(() => {
     const streakStart = STREAK_START_DATE
       ? new Date(STREAK_START_DATE)
@@ -161,28 +201,55 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     );
   }, []);
 
-  const handleSnapPress = useCallback(
-    (key: string, uri: string, idx: number) => {
-      setOpenedSnap({ key, uri });
-      const rowIndex = Math.floor(idx / N_COLUMNS);
-      setScrollIdx(rowIndex);
-    },
-    []
-  );
+  const handleSnapPress = useCallback((key: string, uri: string) => {
+    setOpenedSnap({ key, uri });
+  }, []);
 
   const renderItem = useCallback(
-    ({ item, index }: { item: { key: string }; index: number }) => (
-      <Thumbnail
-        key={item.key}
-        idx={index}
-        snap={item}
-        onSnapPress={handleSnapPress}
-      />
-    ),
+    ({ item, index }: { item: GalleryRow; index: number }) => {
+      const snapsWithPlaceholders: Array<{ key: string } | null> = [
+        ...item.snaps,
+      ];
+      while (snapsWithPlaceholders.length < N_COLUMNS) {
+        snapsWithPlaceholders.push(null);
+      }
+
+      return (
+        <View style={styles.rowContainer}>
+          {item.header && (
+            <View style={styles.monthHeader}>
+              <Text style={styles.monthHeaderText}>{item.header}</Text>
+            </View>
+          )}
+          <View style={styles.row}>
+            {snapsWithPlaceholders.map((snap, columnIdx) =>
+              snap ? (
+                <Thumbnail
+                  key={snap.key}
+                  snap={snap}
+                  onSnapPress={handleSnapPress}
+                />
+              ) : (
+                <View
+                  key={`placeholder-${index}-${columnIdx}`}
+                  style={[
+                    styles.thumbnailContainer,
+                    styles.thumbnailPlaceholder,
+                  ]}
+                />
+              )
+            )}
+          </View>
+        </View>
+      );
+    },
     [handleSnapPress]
   );
 
-  const keyExtractor = useCallback((item: { key: string }) => item.key, []);
+  const keyExtractor = useCallback(
+    (_item: GalleryRow, index: number) => `row-${index}`,
+    []
+  );
 
   if (isLoading || error) {
     return <View />;
@@ -192,19 +259,12 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     <GestureDetector gesture={leftFling}>
       <View style={styles.container}>
         <FlatList
-          numColumns={N_COLUMNS}
-          data={gallery}
+          data={galleryRows}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           windowSize={3} // Current + screens above & below
           initialNumToRender={10}
           maxToRenderPerBatch={10}
-          initialScrollIndex={scrollIdx}
-          getItemLayout={(_data, index) => ({
-            length: THUMBNAIL_HEIGHT,
-            offset: THUMBNAIL_HEIGHT * index,
-            index,
-          })}
         />
         <View style={styles.navbar}>
           <TouchableOpacity onPress={onClose}>
@@ -235,6 +295,24 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#242424" },
+  rowContainer: {
+    width: "100%",
+  },
+  monthHeader: {
+    backgroundColor: "yellow",
+    paddingVertical: 3,
+    paddingHorizontal: 12,
+    alignSelf: "stretch",
+    marginBottom: 0,
+  },
+  monthHeaderText: {
+    color: "#000",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  row: {
+    flexDirection: "row",
+  },
   thumbnailContainer: { flex: 1 },
   thumbnail: {
     aspectRatio: 1,
@@ -261,6 +339,11 @@ const styles = StyleSheet.create({
   reactionEmoji: {
     fontSize: 32,
     marginRight: 4,
+  },
+  thumbnailPlaceholder: {
+    flex: 1,
+    height: THUMBNAIL_HEIGHT,
+    backgroundColor: "transparent",
   },
   navbar: {
     flex: 1,
