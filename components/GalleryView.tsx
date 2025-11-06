@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   },
   reactionOverlay: {
     position: "absolute",
-    top: 8,
+    bottom: 8,
     left: 8,
     flexDirection: "row",
     alignItems: "center",
