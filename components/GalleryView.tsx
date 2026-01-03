@@ -60,6 +60,8 @@ const Thumbnail = memo(
       queryFn: async () => await getSnapReactions(snap.key ?? ""),
       staleTime: 60_000,
       gcTime: 60_000,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
       refetchOnWindowFocus: false,
     });
 
@@ -132,8 +134,42 @@ const Thumbnail = memo(
 );
 Thumbnail.displayName = "Thumbnail";
 
+const GalleryRowItem = memo(
+  ({
+    item,
+    onSnapPress,
+  }: {
+    item: GalleryRow;
+    onSnapPress: (key: string, uri: string) => void;
+  }) => (
+    <View style={styles.rowContainer}>
+      {item.header && (
+        <View style={styles.monthHeader}>
+          <Text style={styles.monthHeaderText}>{item.header}</Text>
+        </View>
+      )}
+      <View style={styles.row}>
+        {item.snaps.map((snap, columnIdx) =>
+          snap ? (
+            <Thumbnail key={snap.key} snap={snap} onSnapPress={onSnapPress} />
+          ) : (
+            <View
+              key={`placeholder-${item.id}-${columnIdx}`}
+              style={styles.thumbnailPlaceholder}
+            />
+          )
+        )}
+      </View>
+    </View>
+  )
+);
+GalleryRowItem.displayName = "GalleryRowItem";
+
 export default function GalleryView({ onClose }: { onClose: () => void }) {
-  const leftFling = Gesture.Fling().direction(Directions.LEFT).onStart(onClose);
+  const leftFling = useMemo(
+    () => Gesture.Fling().direction(Directions.LEFT).onStart(onClose),
+    [onClose]
+  );
   const [openedSnap, setOpenedSnap] = useState<{
     key: string;
     uri: string;
@@ -152,12 +188,22 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         return [];
       }
 
-      const latestSnaps = snaps.reverse();
+      const latestSnaps = snaps.slice().reverse();
       return latestSnaps
         .filter((item) => item.Key)
         .map((item) => ({ key: item.Key! }));
     },
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   });
+
+  const monthFormatter = useMemo(
+    () => new Intl.DateTimeFormat("default", { month: "long", year: "numeric" }),
+    []
+  );
 
   const { galleryRows, rowHeights, rowOffsets } = useMemo(() => {
     if (!gallerySnaps) {
@@ -190,11 +236,13 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
 
     gallerySnaps.forEach((snap) => {
       const snapDate = getDateTimeFromSnapKey(snap.key);
-      const monthKey = `${snapDate.getFullYear()}-${snapDate.getMonth()}`;
-      const headerLabel = snapDate.toLocaleString("default", {
-        month: "long",
-        year: "numeric",
-      });
+      const isValidDate = !Number.isNaN(snapDate.getTime());
+      const monthKey = isValidDate
+        ? `${snapDate.getFullYear()}-${snapDate.getMonth()}`
+        : "unknown";
+      const headerLabel = isValidDate
+        ? monthFormatter.format(snapDate)
+        : "Unknown date";
 
       const isNewMonth = monthKey !== currentMonthKey;
       if (isNewMonth) {
@@ -224,7 +272,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     });
 
     return { galleryRows: rows, rowHeights: heights, rowOffsets: offsets };
-  }, [gallerySnaps]);
+  }, [gallerySnaps, monthFormatter]);
 
   const streakDurationDays = useMemo(() => {
     const streakStart = STREAK_START_DATE
@@ -277,25 +325,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
 
   const renderItem = useCallback(
     ({ item }: { item: GalleryRow }) => (
-      <View style={styles.rowContainer}>
-        {item.header && (
-          <View style={styles.monthHeader}>
-            <Text style={styles.monthHeaderText}>{item.header}</Text>
-          </View>
-        )}
-        <View style={styles.row}>
-          {item.snaps.map((snap, columnIdx) =>
-            snap ? (
-              <Thumbnail key={snap.key} snap={snap} onSnapPress={onSnapPress} />
-            ) : (
-              <View
-                key={`placeholder-${item.id}-${columnIdx}`}
-                style={styles.thumbnailPlaceholder}
-              />
-            )
-          )}
-        </View>
-      </View>
+      <GalleryRowItem item={item} onSnapPress={onSnapPress} />
     ),
     [onSnapPress]
   );
@@ -417,7 +447,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     width: "100%",
     position: "absolute",
-    top: 30,
+    top: 40,
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
