@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
-    paddingTop: 40,
+    paddingTop: 50,
     paddingLeft: 15,
   },
   dateText: {

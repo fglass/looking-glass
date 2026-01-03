@@ -7,6 +7,7 @@ import {
   FlatList,
   View,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Image } from "expo-image";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -20,6 +21,8 @@ import {
   GestureDetector,
 } from "react-native-gesture-handler";
 import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../utils";
+import * as MediaLibrary from "expo-media-library";
+import { Directory, File, Paths } from "expo-file-system";
 
 const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
 const THUMBNAIL_HEIGHT = 200;
@@ -232,9 +235,45 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     );
   }, []);
 
-  const handleSnapPress = useCallback((key: string, uri: string) => {
+  const onSnapPress = useCallback((key: string, uri: string) => {
     setOpenedSnap({ key, uri });
   }, []);
+
+  const onSnapSave = useCallback(async () => {
+    if (!openedSnap) {
+      return;
+    }
+
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
+
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Permission is required to save snaps."
+        );
+        return;
+      }
+
+      let localUri = openedSnap.uri;
+      if (localUri.startsWith("http")) {
+        const safeKey = openedSnap.key.replace(/[^a-z0-9]/gi, "_");
+        const cacheDir = new Directory(Paths.cache, "snaps");
+        if (!cacheDir.exists) {
+          cacheDir.create();
+        }
+        const destination = new File(cacheDir, `${safeKey}.jpg`);
+        const output = await File.downloadFileAsync(localUri, destination);
+        localUri = output.uri;
+      }
+
+      await MediaLibrary.saveToLibraryAsync(localUri);
+      Alert.alert("Success", "Snap saved!");
+    } catch (error) {
+      console.error("Error saving image:", error);
+      Alert.alert("Error", "Failed to save snap.");
+    }
+  }, [openedSnap]);
 
   const renderItem = useCallback(
     ({ item }: { item: GalleryRow }) => (
@@ -247,11 +286,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         <View style={styles.row}>
           {item.snaps.map((snap, columnIdx) =>
             snap ? (
-              <Thumbnail
-                key={snap.key}
-                snap={snap}
-                onSnapPress={handleSnapPress}
-              />
+              <Thumbnail key={snap.key} snap={snap} onSnapPress={onSnapPress} />
             ) : (
               <View
                 key={`placeholder-${item.id}-${columnIdx}`}
@@ -262,7 +297,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         </View>
       </View>
     ),
-    [handleSnapPress]
+    [onSnapPress]
   );
 
   const keyExtractor = useCallback((item: GalleryRow) => item.id, []);
@@ -314,6 +349,9 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
               displayDate={true}
               onClose={() => setOpenedSnap(null)}
             />
+            <TouchableOpacity style={styles.saveButton} onPress={onSnapSave}>
+              <MaterialIcons name="save-alt" size={42} color="white" />
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -402,5 +440,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
+  },
+  saveButton: {
+    position: "absolute",
+    bottom: 30,
+    left: 25,
+    alignItems: "center",
   },
 });
