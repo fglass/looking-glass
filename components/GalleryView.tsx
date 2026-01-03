@@ -411,10 +411,11 @@ const styles = StyleSheet.create({
   },
   thumbnailContainer: { flex: 1 },
   thumbnail: {
-    aspectRatio: 1,
+    width: "100%",
     height: THUMBNAIL_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
   },
   iconOverlay: {
     position: "absolute",

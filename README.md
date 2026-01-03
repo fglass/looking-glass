@@ -7,7 +7,7 @@
 - 🌅 Gallery view
 - 😂 Emoji reactions
 - 🔥 Fake streak counter
-- 🔒 Locked snaps (scratch to reveal)
+- 🔒 Scratch-to-reveal
 - 🔔 Push notifications
 
 ## Setup
