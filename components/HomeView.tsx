@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { CameraView, CameraType } from "expo-camera";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -50,7 +51,10 @@ import { runOnJS } from "react-native-reanimated";
 
 type Snap = { Key: string; LastModified: Date };
 
+const GALLERY_QUERY_KEY = "fetchGallery";
+
 export default function HomeView() {
+  const queryClient = useQueryClient();
   const cameraRef = useRef<CameraView>(null);
   const [cameraType, setCameraType] = useState<CameraType>("back");
 
@@ -119,12 +123,14 @@ export default function HomeView() {
     notificationListener.current = addNotificationReceivedListener((n) => {
       console.log("Notification received:", n);
       setCheckForNewSnaps(true);
+      queryClient.resetQueries({ queryKey: [GALLERY_QUERY_KEY] });
     });
 
     responseListener.current = addNotificationResponseReceivedListener(
       (resp) => {
         console.log("Notification interacted:", resp);
         setCheckForNewSnaps(true);
+        queryClient.resetQueries({ queryKey: [GALLERY_QUERY_KEY] });
       }
     );
 
@@ -284,7 +290,9 @@ export default function HomeView() {
       duration: Toast.durations.LONG,
       position: Toast.positions.TOP,
     });
-    
+
+    queryClient.resetQueries({ queryKey: [GALLERY_QUERY_KEY] });
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
