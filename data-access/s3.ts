@@ -1,4 +1,10 @@
 import { S3 } from "aws-sdk";
+import {
+  CAPTION_TAG_KEY,
+  parseCaptionTag,
+  serializeCaptionTag,
+  SnapCaption,
+} from "../utils";
 
 const s3 = new S3({
   accessKeyId: process.env.EXPO_PUBLIC_AWS_ACCESS_KEY,
@@ -69,6 +75,58 @@ export const uploadSnap = async (key: string, uri: string) => {
     return s3.upload(params).promise();
   } catch (error) {
     console.error("Error uploading snap:", error);
+  }
+};
+
+export const uploadSnapCaption = async (
+  snapKey: string,
+  caption: SnapCaption
+) => {
+  const captionValue = serializeCaptionTag(caption);
+  if (!captionValue) {
+    return;
+  }
+
+  const params: S3.Types.GetObjectTaggingRequest = {
+    Bucket: BUCKET,
+    Key: snapKey,
+  };
+
+  try {
+    const currentTags = await s3.getObjectTagging(params).promise();
+    const updatedTagSet = [
+      ...(currentTags.TagSet?.filter((tag) => tag.Key !== CAPTION_TAG_KEY) ??
+        []),
+      { Key: CAPTION_TAG_KEY, Value: captionValue },
+    ];
+
+    await s3
+      .putObjectTagging({
+        Bucket: BUCKET,
+        Key: snapKey,
+        Tagging: { TagSet: updatedTagSet },
+      })
+      .promise();
+  } catch (error) {
+    console.error("Error uploading caption:", error);
+  }
+};
+
+export const getSnapCaption = async (snapKey: string) => {
+  const params: S3.Types.GetObjectTaggingRequest = {
+    Bucket: BUCKET,
+    Key: snapKey,
+  };
+
+  try {
+    const data = await s3.getObjectTagging(params).promise();
+    const captionTag = data.TagSet?.find((tag) => tag.Key === CAPTION_TAG_KEY);
+    if (!captionTag?.Value) {
+      return null;
+    }
+    return parseCaptionTag(captionTag.Value);
+  } catch (error) {
+    return null;
   }
 };
 

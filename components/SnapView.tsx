@@ -1,9 +1,11 @@
 import { Image } from "expo-image";
+import { useState } from "react";
 import {
   Dimensions,
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableHighlight,
   TouchableOpacity,
   View,
@@ -12,7 +14,10 @@ import {
   HIDDEN_SNAP_KEY,
   getDateTimeFromSnapKey,
   REACTION_EMOJIS,
+  SnapCaption,
 } from "../utils";
+import { getSnapCaption } from "../data-access/s3";
+import { useQuery } from "@tanstack/react-query";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   Canvas,
@@ -41,6 +46,16 @@ export const SnapView = ({
   onClose: () => void;
 }) => {
   const hidden = snap.key.includes(HIDDEN_SNAP_KEY);
+  const [imageLayout, setImageLayout] = useState({ width: 0, height: 0 });
+  const { data: caption } = useQuery<SnapCaption | null>({
+    queryKey: ["fetchSnapCaption", snap.key],
+    queryFn: async () => await getSnapCaption(snap.key),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  });
 
   const scratchPath = useSharedValue(Skia.Path.Make());
   const scratchHandler = Gesture.Pan()
@@ -113,7 +128,13 @@ export const SnapView = ({
 
   return (
     <Animated.View style={styles.container}>
-      <View style={styles.camera}>
+      <View
+        style={styles.camera}
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          setImageLayout({ width, height });
+        }}
+      >
         {hidden ? (
           <GestureDetector gesture={scratchGesture}>
             <View style={styles.imageContainer}>
@@ -127,6 +148,27 @@ export const SnapView = ({
               source={{ uri: snap.uri, cacheKey: snap.key }}
             />
           </TouchableHighlight>
+        )}
+        {!hidden && caption && imageLayout.width > 0 && (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.captionContainer,
+              styles.captionPill,
+              {
+                top: caption.y * imageLayout.height,
+                width: imageLayout.width,
+              },
+            ]}
+          >
+            <TextInput
+              value={caption.text}
+              editable={false}
+              multiline
+              pointerEvents="none"
+              style={[styles.captionText, styles.captionInput]}
+            />
+          </View>
         )}
       </View>
       {displayDate && (
@@ -182,6 +224,39 @@ const styles = StyleSheet.create({
     color: "white",
     textAlign: "center",
     margin: "auto",
+  },
+  captionContainer: {
+    position: "absolute",
+    left: 0,
+  },
+  captionPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 0,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-start",
+    minHeight: 34,
+    maxHeight: 120,
+  },
+  captionText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "400",
+    fontFamily: Platform.select({
+      ios: "Avenir-Book",
+      android: "sans-serif",
+      default: "System",
+    }),
+    letterSpacing: 0.1,
+    textAlign: "center",
+  },
+  captionInput: {
+    padding: 0,
+    margin: 0,
+    lineHeight: 20,
+    textAlignVertical: Platform.select({ android: "top", default: "auto" }),
+    includeFontPadding: false,
+    paddingTop: Platform.select({ ios: 1, default: 0 }),
   },
   dateContainer: {
     position: "absolute",

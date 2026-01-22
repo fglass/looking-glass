@@ -1,13 +1,13 @@
 # looking-glass
 
-[Homecooked Snapchat](https://fred.glass/homecooked-snapchat/), backed by only S3.
+[Homecooked Snapchat](https://fred.glass/homecooked-snapchat/). No backend or serverless functions, only S3.
 
 ## Features
 
 - 🌅 Gallery view
 - 😂 Emoji reactions
 - 🔥 Fake streak counter
-- 🔒 Scratch-to-reveal
+- 👈 Scratch-to-reveal
 - 🔔 Push notifications
 
 ## Setup

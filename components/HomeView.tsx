@@ -15,6 +15,7 @@ import {
   uploadSnap,
   uploadToken,
   addSnapReactionTag,
+  uploadSnapCaption,
 } from "../data-access/s3";
 import { SnapView } from "./SnapView";
 import { SnapPreview } from "./SnapPreview";
@@ -40,6 +41,7 @@ import {
   getTokenFromSnapKey,
   getTokenKey,
   reactionTagFromEmoji,
+  SnapCaption,
 } from "../utils";
 import * as Device from "expo-device";
 import * as Haptics from "expo-haptics";
@@ -240,7 +242,13 @@ export default function HomeView() {
     setPreview({ uri: snap.uri });
   }
 
-  async function sendSnap({ hidden }: { hidden: boolean }) {
+  async function sendSnap({
+    hidden,
+    caption,
+  }: {
+    hidden: boolean;
+    caption?: SnapCaption | null;
+  }) {
     if (!preview) {
       console.error("No snap to send");
       return;
@@ -253,11 +261,14 @@ export default function HomeView() {
     });
     closePreview();
 
-    const resp = await uploadSnap(
-      getSnapKey(clientId, pushToken, hidden),
-      preview.uri
-    );
-    console.log("Upload successful: ", resp);
+    const snapKey = getSnapKey(clientId, pushToken, hidden);
+    const resp = await uploadSnap(snapKey, preview.uri);
+    console.log("Snap upload successful: ", resp);
+    
+    if (caption?.text) {
+      await uploadSnapCaption(snapKey, caption);
+      console.log("Caption upload successful")
+    }
 
     const tokens = await getAllTokens();
     if (tokens) {
@@ -273,6 +284,7 @@ export default function HomeView() {
       duration: Toast.durations.LONG,
       position: Toast.positions.TOP,
     });
+    
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
