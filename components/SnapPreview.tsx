@@ -159,8 +159,6 @@ export const SnapPreview = ({
                   autoFocus
                   multiline
                   maxLength={MAX_CAPTION_CHARS}
-                  placeholder="Add a caption"
-                  placeholderTextColor="rgba(255,255,255,0.6)"
                   style={[styles.captionText, styles.captionInput]}
                 />
               ) : (
