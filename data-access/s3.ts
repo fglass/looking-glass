@@ -1,9 +1,13 @@
 import { S3 } from "aws-sdk";
 import {
   CAPTION_TAG_KEY,
+  LOCATION_TAG_KEY,
   parseCaptionTag,
+  parseLocationTag,
   serializeCaptionTag,
+  serializeLocationTag,
   SnapCaption,
+  SnapLocation,
 } from "../utils";
 
 const s3 = new S3({
@@ -125,7 +129,61 @@ export const getSnapCaption = async (snapKey: string) => {
       return null;
     }
     return parseCaptionTag(captionTag.Value);
+  } catch {
+    return null;
+  }
+};
+
+export const uploadSnapLocation = async (
+  snapKey: string,
+  location: SnapLocation
+) => {
+  const locationValue = serializeLocationTag(location);
+  if (!locationValue) {
+    return;
+  }
+
+  const params: S3.Types.GetObjectTaggingRequest = {
+    Bucket: BUCKET,
+    Key: snapKey,
+  };
+
+  try {
+    const currentTags = await s3.getObjectTagging(params).promise();
+    const updatedTagSet = [
+      ...(currentTags.TagSet?.filter((tag) => tag.Key !== LOCATION_TAG_KEY) ??
+        []),
+      { Key: LOCATION_TAG_KEY, Value: locationValue },
+    ];
+
+    await s3
+      .putObjectTagging({
+        Bucket: BUCKET,
+        Key: snapKey,
+        Tagging: { TagSet: updatedTagSet },
+      })
+      .promise();
   } catch (error) {
+    console.error("Error uploading location:", error);
+  }
+};
+
+export const getSnapLocation = async (snapKey: string) => {
+  const params: S3.Types.GetObjectTaggingRequest = {
+    Bucket: BUCKET,
+    Key: snapKey,
+  };
+
+  try {
+    const data = await s3.getObjectTagging(params).promise();
+    const locationTag = data.TagSet?.find(
+      (tag) => tag.Key === LOCATION_TAG_KEY
+    );
+    if (!locationTag?.Value) {
+      return null;
+    }
+    return parseLocationTag(locationTag.Value);
+  } catch {
     return null;
   }
 };

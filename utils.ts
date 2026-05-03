@@ -7,6 +7,12 @@ export type SnapCaption = {
   y: number;
 };
 
+export type SnapLocation = {
+  latitude: number;
+  longitude: number;
+};
+
+export const LOCATION_TAG_KEY = "location";
 export const CAPTION_TAG_KEY = "caption";
 export const CAPTION_TAG_MAX = 256;
 
@@ -16,7 +22,7 @@ export const getTokenKey = (clientId: string, token: string) =>
 export const getSnapKey = (
   clientId: string,
   token: string,
-  hidden: boolean
+  hidden: boolean,
 ) => {
   const now = new Date();
   return `snap|${now.toISOString()}|${clientId}|${token}|${hidden ? `|${HIDDEN_SNAP_KEY}` : ""}.jpg`;
@@ -112,6 +118,44 @@ const rsplit = (value: string, sep: string, count: number) => {
 const restoreCaptionTextFromTag = (text: string) =>
   text.replace(/@n@/g, "\n").replace(/@@/g, "@");
 
+export const serializeLocationTag = (location: SnapLocation) => {
+  if (
+    !isValidLatitude(location.latitude) ||
+    !isValidLongitude(location.longitude)
+  ) {
+    return null;
+  }
+
+  return `v1:${location.latitude}:${location.longitude}`;
+};
+
+export const parseLocationTag = (value: string): SnapLocation | null => {
+  const parts = value.split(":");
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const [version, rawLatitude, rawLongitude] = parts;
+  if (version !== "v1" || !rawLatitude || !rawLongitude) {
+    return null;
+  }
+
+  const latitude = Number.parseFloat(rawLatitude);
+  const longitude = Number.parseFloat(rawLongitude);
+
+  if (!isValidLatitude(latitude) || !isValidLongitude(longitude)) {
+    return null;
+  }
+
+  return { latitude, longitude };
+};
+
+const isValidLatitude = (value: number) =>
+  Number.isFinite(value) && value >= -90 && value <= 90;
+
+const isValidLongitude = (value: number) =>
+  Number.isFinite(value) && value >= -180 && value <= 180;
+
 const parseReactionMap = () => {
   const raw = process.env.EXPO_PUBLIC_REACTION_MAP;
   if (!raw) {
@@ -142,7 +186,7 @@ export const TAG_TO_EMOJI: Record<string, string> = parseReactionMap();
 export const REACTION_EMOJIS = Object.values(TAG_TO_EMOJI);
 
 export const EMOJI_TO_TAG = Object.fromEntries(
-  Object.entries(TAG_TO_EMOJI).map(([tag, emoji]) => [emoji, tag])
+  Object.entries(TAG_TO_EMOJI).map(([tag, emoji]) => [emoji, tag]),
 );
 
 export const reactionTagFromEmoji = (emoji: string) => EMOJI_TO_TAG[emoji];

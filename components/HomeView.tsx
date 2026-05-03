@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CameraView, CameraType } from "expo-camera";
+import * as Location from "expo-location";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Toast from "react-native-root-toast";
@@ -17,6 +18,7 @@ import {
   uploadToken,
   addSnapReactionTag,
   uploadSnapCaption,
+  uploadSnapLocation,
 } from "../data-access/s3";
 import { SnapView } from "./SnapView";
 import { SnapPreview } from "./SnapPreview";
@@ -43,6 +45,7 @@ import {
   getTokenKey,
   reactionTagFromEmoji,
   SnapCaption,
+  SnapLocation,
 } from "../utils";
 import * as Device from "expo-device";
 import * as Haptics from "expo-haptics";
@@ -58,7 +61,10 @@ export default function HomeView() {
   const cameraRef = useRef<CameraView>(null);
   const [cameraType, setCameraType] = useState<CameraType>("back");
 
-  const [preview, setPreview] = useState<{ uri: string } | null>(null);
+  const [preview, setPreview] = useState<{
+    uri: string;
+    location: SnapLocation | null;
+  } | null>(null);
   const [openedSnap, setOpenedSnap] = useState<{
     key: string;
     uri: string;
@@ -69,8 +75,9 @@ export default function HomeView() {
 
   const clientId = useClientId();
   const { displayName } = useDisplayName();
-  const { lastSnap, setLastSnap } = useLastSnap();
+  const isOnboarded = Boolean(displayName);
 
+  const { lastSnap, setLastSnap } = useLastSnap();
   const [checkForNewSnaps, setCheckForNewSnaps] = useState(true);
   const [pendingSnaps, setPendingSnaps] = useState<Snap[]>([]);
 
@@ -103,6 +110,25 @@ export default function HomeView() {
     .onStart(() => runOnJS(toggleCameraType)());
 
   useEffect(() => {
+    if (!isOnboarded) {
+      return;
+    }
+
+    const requestLocationPermission = async () => {
+      try {
+        const permission = await Location.getForegroundPermissionsAsync();
+        if (!permission.granted && permission.canAskAgain) {
+          await Location.requestForegroundPermissionsAsync();
+        }
+      } catch (error) {
+        console.error("Error requesting location permission:", error);
+      }
+    };
+
+    requestLocationPermission();
+  }, [isOnboarded]);
+
+  useEffect(() => {
     if (!clientId || !Device.isDevice) {
       return;
     }
@@ -114,7 +140,7 @@ export default function HomeView() {
         if (token) {
           console.log("Uploading token...");
           uploadToken(getTokenKey(clientId, token), token).then(() =>
-            console.log("Token upload successful")
+            console.log("Token upload successful"),
           );
         }
       })
@@ -131,19 +157,19 @@ export default function HomeView() {
         console.log("Notification interacted:", resp);
         setCheckForNewSnaps(true);
         queryClient.resetQueries({ queryKey: [GALLERY_QUERY_KEY] });
-      }
+      },
     );
 
     return () => {
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };
-  }, [clientId]);
+  }, [clientId, queryClient]);
 
   useEffect(() => {
     const fetchNewSnaps = async (
       lastSnapKey: string | undefined,
-      lastOpenedDate: Date
+      lastOpenedDate: Date,
     ) => {
       const snaps = await getSnaps(lastSnapKey);
       if (!snaps) {
@@ -155,7 +181,7 @@ export default function HomeView() {
             item.Key &&
             (selfSend || !item.Key.includes(clientId)) &&
             item.LastModified &&
-            item.LastModified > lastOpenedDate
+            item.LastModified > lastOpenedDate,
         )
         .map((item) => ({ Key: item.Key!, LastModified: item.LastModified! }));
       setPendingSnaps(pendingSnaps);
@@ -172,7 +198,7 @@ export default function HomeView() {
     return null;
   }
 
-  if (!displayName) {
+  if (!isOnboarded) {
     return <SetupView />;
   }
 
@@ -245,7 +271,29 @@ export default function HomeView() {
       return;
     }
 
-    setPreview({ uri: snap.uri });
+    const location = await getCurrentSnapLocation();
+    setPreview({ uri: snap.uri, location });
+  }
+
+  async function getCurrentSnapLocation(): Promise<SnapLocation | null> {
+    try {
+      const permission = await Location.getForegroundPermissionsAsync();
+      if (!permission.granted) {
+        return null;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      return {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+    } catch (error) {
+      console.error("Error fetching location:", error);
+      return null;
+    }
   }
 
   async function sendSnap({
@@ -270,10 +318,15 @@ export default function HomeView() {
     const snapKey = getSnapKey(clientId, pushToken, hidden);
     const resp = await uploadSnap(snapKey, preview.uri);
     console.log("Snap upload successful: ", resp);
-    
+
+    if (preview.location) {
+      await uploadSnapLocation(snapKey, preview.location);
+      console.log("Location upload successful");
+    }
+
     if (caption?.text) {
       await uploadSnapCaption(snapKey, caption);
-      console.log("Caption upload successful")
+      console.log("Caption upload successful");
     }
 
     const tokens = await getAllTokens();

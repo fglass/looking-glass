@@ -43,6 +43,13 @@ export default {
       "expo-media-library",
       { savePhotosPermission: "Allow $(PRODUCT_NAME) to save photos." },
     ],
+    [
+      "expo-location",
+      {
+        locationWhenInUsePermission:
+          "Allow $(PRODUCT_NAME) to tag photos with where they were taken.",
+      },
+    ],
     ["expo-notifications", { enableBackgroundRemoteNotifications: true }],
   ],
   extra: { eas: { projectId: process.env.EAS_PROJECT_ID } },
