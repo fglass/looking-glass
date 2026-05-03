@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo } from "react";
+import { useState, useMemo, useCallback, memo, useRef } from "react";
 import {
   Text,
   TouchableHighlight,
@@ -8,19 +8,29 @@ import {
   View,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
+import type { ViewToken } from "react-native";
 import { Image } from "expo-image";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { SnapView } from "./SnapView";
 import { getSnapUrl, getSnaps, getSnapReactions } from "../data-access/s3";
-import { TAG_TO_EMOJI, getDateTimeFromSnapKey } from "../utils";
+import {
+  BLUR_HASH,
+  HIDDEN_SNAP_KEY,
+  TAG_TO_EMOJI,
+  getDateTimeFromSnapKey,
+} from "../utils";
 import {
   Directions,
   Gesture,
   GestureDetector,
 } from "react-native-gesture-handler";
-import { BLUR_HASH, HIDDEN_SNAP_KEY } from "../utils";
 import * as MediaLibrary from "expo-media-library";
 import { Directory, File, Paths } from "expo-file-system";
 
@@ -28,11 +38,57 @@ const STREAK_START_DATE = process.env.EXPO_PUBLIC_STREAK_START_DATE;
 const THUMBNAIL_HEIGHT = 200;
 const MONTH_HEADER_HEIGHT = 28;
 const N_COLUMNS = 2;
+const DAY_MS = 1000 * 60 * 60 * 24;
 
 type GalleryRow = {
   id: string;
   header?: string;
+  dayStart?: Date;
   snaps: ({ key: string } | null)[];
+};
+
+type GalleryDay = {
+  key: string;
+  firstRowIndex: number;
+  dayStart: Date;
+};
+
+const getMonthKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}`;
+
+const getDayKey = (date: Date) =>
+  `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
+const getDayStart = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const getClosestGalleryDay = (
+  galleryDays: GalleryDay[],
+  selectedDayStart: Date,
+) => {
+  const selectedTime = selectedDayStart.getTime();
+
+  return galleryDays.reduce<GalleryDay | null>((closestDay, day) => {
+    if (!closestDay) {
+      return day;
+    }
+
+    const currentDistance = Math.abs(day.dayStart.getTime() - selectedTime);
+    const closestDistance = Math.abs(
+      closestDay.dayStart.getTime() - selectedTime,
+    );
+
+    if (currentDistance < closestDistance) {
+      return day;
+    }
+
+    const currentDayIsOlder =
+      day.dayStart.getTime() < closestDay.dayStart.getTime();
+    if (currentDistance === closestDistance && currentDayIsOlder) {
+      return day;
+    }
+
+    return closestDay;
+  }, null);
 };
 
 const Thumbnail = memo(
@@ -130,7 +186,7 @@ const Thumbnail = memo(
         </View>
       </TouchableHighlight>
     );
-  }
+  },
 );
 Thumbnail.displayName = "Thumbnail";
 
@@ -157,23 +213,29 @@ const GalleryRowItem = memo(
               key={`placeholder-${item.id}-${columnIdx}`}
               style={styles.thumbnailPlaceholder}
             />
-          )
+          ),
         )}
       </View>
     </View>
-  )
+  ),
 );
 GalleryRowItem.displayName = "GalleryRowItem";
 
 export default function GalleryView({ onClose }: { onClose: () => void }) {
+  const galleryListRef = useRef<FlatList<GalleryRow>>(null);
   const leftFling = useMemo(
     () => Gesture.Fling().direction(Directions.LEFT).onStart(onClose),
-    [onClose]
+    [onClose],
   );
   const [openedSnap, setOpenedSnap] = useState<{
     key: string;
     uri: string;
   } | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState(new Date());
+  const [currentScrolledDate, setCurrentScrolledDate] = useState<Date | null>(
+    null,
+  );
   const {
     isLoading,
     error,
@@ -201,22 +263,26 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
   });
 
   const monthFormatter = useMemo(
-    () => new Intl.DateTimeFormat("default", { month: "long", year: "numeric" }),
-    []
+    () =>
+      new Intl.DateTimeFormat("default", { month: "long", year: "numeric" }),
+    [],
   );
 
-  const { galleryRows, rowHeights, rowOffsets } = useMemo(() => {
+  const { galleryRows, rowHeights, rowOffsets, galleryDays } = useMemo(() => {
     if (!gallerySnaps) {
       return {
         galleryRows: [] as GalleryRow[],
         rowHeights: [] as number[],
         rowOffsets: [] as number[],
+        galleryDays: [] as GalleryDay[],
       };
     }
 
     const rows: GalleryRow[] = [];
     const heights: number[] = [];
     const offsets: number[] = [];
+    const days: GalleryDay[] = [];
+    const seenDays = new Set<string>();
 
     let runningOffset = 0;
     let currentMonthKey: string | null = null;
@@ -237,9 +303,8 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     gallerySnaps.forEach((snap) => {
       const snapDate = getDateTimeFromSnapKey(snap.key);
       const isValidDate = !Number.isNaN(snapDate.getTime());
-      const monthKey = isValidDate
-        ? `${snapDate.getFullYear()}-${snapDate.getMonth()}`
-        : "unknown";
+      const snapDayStart = isValidDate ? getDayStart(snapDate) : null;
+      const monthKey = isValidDate ? getMonthKey(snapDate) : "unknown";
       const headerLabel = isValidDate
         ? monthFormatter.format(snapDate)
         : "Unknown date";
@@ -252,7 +317,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         const rowId = `${monthKey}-${rowIndex}`;
         currentRow = pushRow(
           rowId,
-          rows.length === 0 ? undefined : headerLabel
+          rows.length === 0 ? undefined : headerLabel,
         );
         monthRowCounts[monthKey] = rowIndex + 1;
       } else if (!currentRow || currentRow.snaps.length === N_COLUMNS) {
@@ -260,6 +325,22 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         const rowId = `${monthKey}-${rowIndex}`;
         currentRow = pushRow(rowId);
         monthRowCounts[monthKey] = rowIndex + 1;
+      }
+
+      if (snapDayStart) {
+        const dayKey = getDayKey(snapDayStart);
+        if (!seenDays.has(dayKey)) {
+          seenDays.add(dayKey);
+          days.push({
+            key: dayKey,
+            firstRowIndex: rows.length - 1,
+            dayStart: snapDayStart,
+          });
+        }
+
+        if (currentRow && !currentRow.dayStart) {
+          currentRow.dayStart = snapDayStart;
+        }
       }
 
       currentRow?.snaps.push({ key: snap.key });
@@ -271,16 +352,98 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
       }
     });
 
-    return { galleryRows: rows, rowHeights: heights, rowOffsets: offsets };
+    return {
+      galleryRows: rows,
+      rowHeights: heights,
+      rowOffsets: offsets,
+      galleryDays: days,
+    };
   }, [gallerySnaps, monthFormatter]);
+
+  const newestGalleryDay = galleryDays[0];
+  const oldestGalleryDay = galleryDays[galleryDays.length - 1];
+  const visiblePickerDate =
+    currentScrolledDate ??
+    newestGalleryDay?.dayStart ??
+    getDayStart(new Date());
+
+  const jumpToDate = useCallback(
+    (date: Date) => {
+      const selectedDayStart = getDayStart(date);
+      const selectedDayKey = getDayKey(selectedDayStart);
+      const targetDay =
+        galleryDays.find((day) => day.key === selectedDayKey) ??
+        getClosestGalleryDay(galleryDays, selectedDayStart);
+
+      if (!targetDay) {
+        return;
+      }
+
+      galleryListRef.current?.scrollToIndex({
+        index: targetDay.firstRowIndex,
+        animated: true,
+        viewPosition: 0,
+      });
+    },
+    [galleryDays],
+  );
+
+  const onDatePickerChange = useCallback(
+    (event: DateTimePickerEvent, date?: Date) => {
+      if (Platform.OS === "android") {
+        setShowDatePicker(false);
+
+        if (event.type === "set" && date) {
+          jumpToDate(date);
+        }
+        return;
+      }
+
+      if (date) {
+        setPickerDate(getDayStart(date));
+      }
+    },
+    [jumpToDate],
+  );
+
+  const confirmDatePickerSelection = useCallback(() => {
+    setShowDatePicker(false);
+    jumpToDate(pickerDate);
+  }, [jumpToDate, pickerDate]);
+
+  const cancelDatePickerSelection = useCallback(() => {
+    setShowDatePicker(false);
+  }, []);
+
+  const openDatePicker = useCallback(() => {
+    if (!newestGalleryDay || !oldestGalleryDay) {
+      return;
+    }
+
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value: visiblePickerDate,
+        mode: "date",
+        minimumDate: oldestGalleryDay.dayStart,
+        onChange: onDatePickerChange,
+      });
+      return;
+    }
+
+    setPickerDate(visiblePickerDate);
+    setShowDatePicker(true);
+  }, [
+    newestGalleryDay,
+    oldestGalleryDay,
+    onDatePickerChange,
+    visiblePickerDate,
+  ]);
 
   const streakDurationDays = useMemo(() => {
     const streakStart = STREAK_START_DATE
       ? new Date(STREAK_START_DATE)
       : new Date();
-    return Math.floor(
-      (Date.now() - new Date(streakStart).getTime()) / (1000 * 60 * 60 * 24)
-    );
+    return Math.floor((Date.now() - streakStart.getTime()) / DAY_MS);
   }, []);
 
   const onSnapPress = useCallback((key: string, uri: string) => {
@@ -298,7 +461,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
       if (status !== "granted") {
         Alert.alert(
           "Permission Denied",
-          "Permission is required to save snaps."
+          "Permission is required to save snaps.",
         );
         return;
       }
@@ -327,7 +490,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     ({ item }: { item: GalleryRow }) => (
       <GalleryRowItem item={item} onSnapPress={onSnapPress} />
     ),
-    [onSnapPress]
+    [onSnapPress],
   );
 
   const keyExtractor = useCallback((item: GalleryRow) => item.id, []);
@@ -338,8 +501,38 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
       offset: rowOffsets[index] ?? THUMBNAIL_HEIGHT * index,
       index,
     }),
-    [rowHeights, rowOffsets]
+    [rowHeights, rowOffsets],
   );
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken<GalleryRow>[] }) => {
+      let firstVisibleDatedRow: GalleryRow | null = null;
+      let firstVisibleRowIndex = Infinity;
+
+      for (const viewToken of viewableItems) {
+        if (
+          !viewToken.isViewable ||
+          typeof viewToken.index !== "number" ||
+          !viewToken.item.dayStart
+        ) {
+          continue;
+        }
+
+        if (viewToken.index < firstVisibleRowIndex) {
+          firstVisibleDatedRow = viewToken.item;
+          firstVisibleRowIndex = viewToken.index;
+        }
+      }
+
+      if (firstVisibleDatedRow?.dayStart) {
+        setCurrentScrolledDate(firstVisibleDatedRow.dayStart);
+      }
+    },
+  ).current;
 
   if (isLoading || error) {
     return <View />;
@@ -349,6 +542,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
     <GestureDetector gesture={leftFling}>
       <View style={styles.container}>
         <FlatList
+          ref={galleryListRef}
           data={galleryRows}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
@@ -358,10 +552,19 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
           updateCellsBatchingPeriod={50}
           removeClippedSubviews
           getItemLayout={getItemLayout}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
         />
         <View style={styles.navbar}>
           <TouchableOpacity onPress={onClose}>
             <MaterialIcons name="arrow-back-ios" size={36} color="yellow" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.calendarNavButton}
+            onPress={openDatePicker}
+            disabled={!newestGalleryDay || !oldestGalleryDay}
+          >
+            <MaterialIcons name="calendar-today" size={32} color="yellow" />
           </TouchableOpacity>
           {streakDurationDays > 0 && (
             <View style={styles.streakContainer}>
@@ -371,6 +574,28 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
             </View>
           )}
         </View>
+        {showDatePicker && Platform.OS === "ios" && (
+          <View style={styles.datePickerOverlay}>
+            <View style={styles.datePickerContainer}>
+              <View style={styles.datePickerActions}>
+                <TouchableOpacity onPress={cancelDatePickerSelection}>
+                  <MaterialIcons name="close" size={28} color="yellow" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={confirmDatePickerSelection}>
+                  <Text style={styles.datePickerActionText}>Go</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={pickerDate}
+                mode="date"
+                display="spinner"
+                minimumDate={oldestGalleryDay?.dayStart}
+                onChange={onDatePickerChange}
+                textColor="#ffffff"
+              />
+            </View>
+          </View>
+        )}
         {openedSnap && (
           <View style={styles.snapOverlay}>
             <SnapView
@@ -452,6 +677,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
+  calendarNavButton: {
+    position: "absolute",
+    left: 58,
+    top: 6,
+    height: 44,
+    width: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   streakContainer: {
     backgroundColor: "yellow",
     paddingTop: 5,
@@ -477,5 +711,32 @@ const styles = StyleSheet.create({
     bottom: 30,
     left: 25,
     alignItems: "center",
+  },
+  datePickerOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "transparent",
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    zIndex: 900,
+  },
+  datePickerContainer: {
+    backgroundColor: "rgba(36, 36, 36, 0.88)",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  datePickerActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 0,
+  },
+  datePickerActionText: {
+    color: "yellow",
+    fontSize: 17,
+    fontWeight: "600",
   },
 });
