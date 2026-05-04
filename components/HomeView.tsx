@@ -56,6 +56,9 @@ type Snap = { Key: string; LastModified: Date };
 
 const GALLERY_QUERY_KEY = "fetchGallery";
 
+const SNAP_LOCATION_MAX_AGE_MS = 10 * 60_000;
+const SNAP_LOCATION_REQUIRED_ACCURACY_METERS = 500;
+
 export default function HomeView() {
   const queryClient = useQueryClient();
   const cameraRef = useRef<CameraView>(null);
@@ -63,7 +66,6 @@ export default function HomeView() {
 
   const [preview, setPreview] = useState<{
     uri: string;
-    location: SnapLocation | null;
   } | null>(null);
   const [openedSnap, setOpenedSnap] = useState<{
     key: string;
@@ -271,8 +273,7 @@ export default function HomeView() {
       return;
     }
 
-    const location = await getCurrentSnapLocation();
-    setPreview({ uri: snap.uri, location });
+    setPreview({ uri: snap.uri });
   }
 
   async function getCurrentSnapLocation(): Promise<SnapLocation | null> {
@@ -282,9 +283,17 @@ export default function HomeView() {
         return null;
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+      const recentLocation = await Location.getLastKnownPositionAsync({
+        maxAge: SNAP_LOCATION_MAX_AGE_MS,
+        requiredAccuracy: SNAP_LOCATION_REQUIRED_ACCURACY_METERS,
       });
+
+      const location =
+        recentLocation ??
+        (await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          mayShowUserSettingsDialog: false,
+        }));
 
       return {
         latitude: location.coords.latitude,
@@ -315,12 +324,16 @@ export default function HomeView() {
     });
     closePreview();
 
+    // Start location lookup before upload
+    const locationPromise = getCurrentSnapLocation();
+
     const snapKey = getSnapKey(clientId, pushToken, hidden);
     const resp = await uploadSnap(snapKey, preview.uri);
     console.log("Snap upload successful: ", resp);
 
-    if (preview.location) {
-      await uploadSnapLocation(snapKey, preview.location);
+    const location = await locationPromise;
+    if (location) {
+      await uploadSnapLocation(snapKey, location);
       console.log("Location upload successful");
     }
 
