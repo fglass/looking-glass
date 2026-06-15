@@ -6,6 +6,8 @@ import Constants from "expo-constants";
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: false,
     shouldSetBadge: true,
   }),
@@ -76,7 +78,7 @@ export async function sendPushNotifications({
   notification: PushNotification;
   idToIgnore?: string;
 }) {
-  const messages: (PushNotification | { to: string; sound: string })[] = [];
+  const messages: (PushNotification & { to: string; sound: string })[] = [];
 
   tokens.forEach((t) => {
     if (t.Key) {
@@ -93,6 +95,10 @@ export async function sendPushNotifications({
     }
   });
 
+  if (messages.length === 0) {
+    return;
+  }
+
   const resp = await fetch("https://exp.host/--/api/v2/push/send", {
     method: "POST",
     headers: {
@@ -103,7 +109,10 @@ export async function sendPushNotifications({
     body: JSON.stringify(messages),
   });
 
-  if (resp.status !== 200) {
-    console.error("Error sending notifications: ", resp);
+  if (!resp.ok) {
+    const responseBody = await resp.text().catch(() => "");
+    throw new Error(
+      `Error sending notifications: ${resp.status} ${responseBody}`,
+    );
   }
 }

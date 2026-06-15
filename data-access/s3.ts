@@ -15,7 +15,7 @@ const s3 = new S3({
   secretAccessKey: process.env.EXPO_PUBLIC_AWS_SECRET_KEY,
   region: process.env.EXPO_PUBLIC_S3_BUCKET_REGION,
   maxRetries: 3,
-  httpOptions: { connectTimeout: 5000, timeout: 60_000 },
+  httpOptions: { connectTimeout: 5000, timeout: 10_000 },
 });
 
 const BUCKET = process.env.EXPO_PUBLIC_S3_BUCKET_NAME ?? "";
@@ -66,6 +66,9 @@ export const getSnapUrl = (key: string) => {
 
 export const uploadSnap = async (key: string, uri: string) => {
   const imgResponse = await fetch(uri);
+  if (!imgResponse.ok) {
+    throw new Error(`Unable to read image: ${imgResponse.status}`);
+  }
   const imgBuffer = await imgResponse.arrayBuffer();
 
   const params: S3.Types.PutObjectRequest = {
@@ -79,12 +82,13 @@ export const uploadSnap = async (key: string, uri: string) => {
     return s3.upload(params).promise();
   } catch (error) {
     console.error("Error uploading snap:", error);
+    throw error;
   }
 };
 
 export const uploadSnapCaption = async (
   snapKey: string,
-  caption: SnapCaption
+  caption: SnapCaption,
 ) => {
   const captionValue = serializeCaptionTag(caption);
   if (!captionValue) {
@@ -113,6 +117,7 @@ export const uploadSnapCaption = async (
       .promise();
   } catch (error) {
     console.error("Error uploading caption:", error);
+    throw error;
   }
 };
 
@@ -136,7 +141,7 @@ export const getSnapCaption = async (snapKey: string) => {
 
 export const uploadSnapLocation = async (
   snapKey: string,
-  location: SnapLocation
+  location: SnapLocation,
 ) => {
   const locationValue = serializeLocationTag(location);
   if (!locationValue) {
@@ -165,6 +170,7 @@ export const uploadSnapLocation = async (
       .promise();
   } catch (error) {
     console.error("Error uploading location:", error);
+    throw error;
   }
 };
 
@@ -177,7 +183,7 @@ export const getSnapLocation = async (snapKey: string) => {
   try {
     const data = await s3.getObjectTagging(params).promise();
     const locationTag = data.TagSet?.find(
-      (tag) => tag.Key === LOCATION_TAG_KEY
+      (tag) => tag.Key === LOCATION_TAG_KEY,
     );
     if (!locationTag?.Value) {
       return null;
@@ -219,7 +225,7 @@ export const addSnapReactionTag = async (key: string, reaction: string) => {
   try {
     const currentTags = await s3.getObjectTagging(params).promise();
     const existingReactionTag = currentTags.TagSet?.find(
-      (tag) => tag.Key === "reaction"
+      (tag) => tag.Key === "reaction",
     );
 
     const reactions = existingReactionTag?.Value
@@ -265,9 +271,10 @@ export const getAllTokens = async () => {
   try {
     // TODO: paginate
     const data = await s3.listObjectsV2(params).promise();
-    return data.Contents;
+    return data.Contents ?? [];
   } catch (error) {
     console.error("Error fetching tokens:", error);
+    throw error;
   }
 };
 
@@ -283,5 +290,6 @@ export const uploadToken = async (key: string, token: string) => {
     return s3.upload(params).promise();
   } catch (error) {
     console.error("Error uploading token:", error);
+    throw error;
   }
 };

@@ -1,8 +1,14 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CameraView, CameraType } from "expo-camera";
 import * as Location from "expo-location";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  AppState,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Toast from "react-native-root-toast";
 import {
@@ -13,13 +19,15 @@ import {
 import {
   getSnapUrl,
   getSnaps,
-  getAllTokens,
-  uploadSnap,
   uploadToken,
   addSnapReactionTag,
-  uploadSnapCaption,
-  uploadSnapLocation,
 } from "../data-access/s3";
+import {
+  enqueueSnapSend,
+  getQueuedSnapSends,
+  pendingSnapSendsQueryKey,
+  processPendingSnapSends,
+} from "../data-access/outbox";
 import { SnapView } from "./SnapView";
 import { SnapPreview } from "./SnapPreview";
 import GalleryView from "./GalleryView";
@@ -56,6 +64,7 @@ type Snap = { Key: string; LastModified: Date };
 
 const GALLERY_QUERY_KEY = "fetchGallery";
 
+const SNAP_SEND_RETRY_INTERVAL_MS = 15_000;
 const SNAP_LOCATION_MAX_AGE_MS = 10 * 60_000;
 const SNAP_LOCATION_REQUIRED_ACCURACY_METERS = 500;
 
@@ -86,6 +95,45 @@ export default function HomeView() {
   const [pushToken, setPushToken] = useState("");
   const notificationListener = useRef<EventSubscription | null>(null);
   const responseListener = useRef<EventSubscription | null>(null);
+
+  const processSnapSendOutbox = useCallback(
+    async (sendingToast?: unknown) => {
+      if (!clientId || !displayName) {
+        return;
+      }
+
+      let sendingToastHidden = false;
+      const hideSendingToast = () => {
+        if (sendingToast && !sendingToastHidden) {
+          Toast.hide(sendingToast);
+          sendingToastHidden = true;
+        }
+      };
+
+      await processPendingSnapSends({
+        clientId,
+        displayName,
+        selfSend,
+        onSent: async (item) => {
+          hideSendingToast();
+          Toast.show(item.hidden ? "🔒 Snap sent!" : "Snap sent!", {
+            duration: Toast.durations.LONG,
+            position: Toast.positions.TOP,
+          });
+
+          queryClient.resetQueries({ queryKey: [GALLERY_QUERY_KEY] });
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        },
+      });
+
+      hideSendingToast();
+
+      await queryClient.invalidateQueries({
+        queryKey: pendingSnapSendsQueryKey(),
+      });
+    },
+    [clientId, displayName, queryClient, selfSend],
+  );
 
   function goToSettings() {
     setShowSettings(true);
@@ -141,9 +189,9 @@ export default function HomeView() {
         setPushToken(token ?? "");
         if (token) {
           console.log("Uploading token...");
-          uploadToken(getTokenKey(clientId, token), token).then(() =>
-            console.log("Token upload successful"),
-          );
+          uploadToken(getTokenKey(clientId, token), token)
+            .then(() => console.log("Token upload successful"))
+            .catch((error) => console.error("Error uploading token:", error));
         }
       })
       .catch((error: any) => setPushToken(`${error}`));
@@ -195,6 +243,28 @@ export default function HomeView() {
       setCheckForNewSnaps(false);
     }
   }, [checkForNewSnaps, clientId, lastSnap, selfSend]);
+
+  useEffect(() => {
+    if (!clientId || !displayName) {
+      return;
+    }
+
+    processSnapSendOutbox();
+    const retryInterval = setInterval(
+      processSnapSendOutbox,
+      SNAP_SEND_RETRY_INTERVAL_MS,
+    );
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        processSnapSendOutbox();
+      }
+    });
+
+    return () => {
+      clearInterval(retryInterval);
+      subscription.remove();
+    };
+  }, [clientId, displayName, processSnapSendOutbox]);
 
   if (displayName === undefined) {
     return null;
@@ -305,6 +375,11 @@ export default function HomeView() {
     }
   }
 
+  // Send flow:
+  // - Copy the preview into the persisted outbox
+  // - Close the preview after the snap is durably queued
+  // - Try to upload immediately, leaving failures queued for retry
+  // - Retry queued sends on app launch, foreground, and interval ticks
   async function sendSnap({
     hidden,
     caption,
@@ -317,49 +392,48 @@ export default function HomeView() {
       return;
     }
 
-    console.log("Sending snap...");
     const prevToast = Toast.show("Sending snap...", {
-      duration: 60_000,
+      duration: 30_000,
       position: Toast.positions.TOP,
     });
-    closePreview();
 
-    // Start location lookup before upload
-    const locationPromise = getCurrentSnapLocation();
+    try {
+      console.log("Getting location...");
+      const location = await getCurrentSnapLocation();
 
-    const snapKey = getSnapKey(clientId, pushToken, hidden);
-    const resp = await uploadSnap(snapKey, preview.uri);
-    console.log("Snap upload successful: ", resp);
-
-    const location = await locationPromise;
-    if (location) {
-      await uploadSnapLocation(snapKey, location);
-      console.log("Location upload successful");
-    }
-
-    if (caption?.text) {
-      await uploadSnapCaption(snapKey, caption);
-      console.log("Caption upload successful");
-    }
-
-    const tokens = await getAllTokens();
-    if (tokens) {
-      await sendPushNotifications({
-        tokens,
-        notification: { title: displayName, body: "New Snap 🔍", badge: 1 },
-        idToIgnore: !selfSend ? clientId : "",
+      console.log("Queueing snap...");
+      const queuedSnap = await enqueueSnapSend({
+        snapKey: getSnapKey(clientId, pushToken, hidden),
+        imageUri: preview.uri,
+        hidden,
+        caption,
+        location,
       });
+
+      closePreview();
+      await queryClient.invalidateQueries({
+        queryKey: pendingSnapSendsQueryKey(),
+      });
+
+      await processSnapSendOutbox(prevToast);
+
+      const queuedItems = await getQueuedSnapSends();
+      if (queuedItems.some((item) => item.id === queuedSnap.id)) {
+        Toast.show("Failed to send snap. Trying again later...", {
+          duration: Toast.durations.LONG,
+          position: Toast.positions.TOP,
+        });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } catch (error) {
+      Toast.hide(prevToast);
+      console.error("Error queueing snap:", error);
+      Toast.show("Failed to send snap.", {
+        duration: Toast.durations.LONG,
+        position: Toast.positions.TOP,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
-
-    Toast.hide(prevToast);
-    Toast.show(hidden ? "🔒 Snap sent!" : "Snap sent!", {
-      duration: Toast.durations.LONG,
-      position: Toast.positions.TOP,
-    });
-
-    queryClient.resetQueries({ queryKey: [GALLERY_QUERY_KEY] });
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   async function openNextSnap() {

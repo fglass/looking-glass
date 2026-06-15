@@ -10,6 +10,7 @@ import {
   Gesture,
   GestureDetector,
 } from "react-native-gesture-handler";
+import { usePendingSnapSends } from "../data-access/outbox";
 
 export default function SettingsView({
   pushToken,
@@ -29,6 +30,7 @@ export default function SettingsView({
   const { displayName } = useDisplayName();
   const clientId = useClientId();
   const { lastSnap } = useLastSnap();
+  const { pendingCount, failedCount } = usePendingSnapSends();
 
   return (
     <GestureDetector gesture={downFling}>
@@ -52,6 +54,9 @@ export default function SettingsView({
         </Text>
         <Text style={styles.smallText}>
           Bucket: {bucket} ({bucketRegion})
+        </Text>
+        <Text style={styles.smallText}>
+          Outbox: {pendingCount} pending, {failedCount} failed
         </Text>
         <Text style={styles.smallText}>
           Last Snap: {lastSnap?.Key ?? "N/A"}
