@@ -50,6 +50,7 @@ export default {
           "Allow $(PRODUCT_NAME) to tag photos with where they were taken.",
       },
     ],
+    "expo-font",
     ["expo-notifications", { enableBackgroundRemoteNotifications: true }],
   ],
   extra: { eas: { projectId: process.env.EAS_PROJECT_ID } },

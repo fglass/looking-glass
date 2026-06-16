@@ -1,0 +1,205 @@
+name: CI
+
+on:
+    push:
+        branches:
+            - main
+    pull_request_target:
+        types:
+            - closed
+        branches:
+            - main
+
+permissions:
+    contents: write
+    pull-requests: write
+    issues: write
+
+env:
+    APP_VARIANT: preview
+    BUNDLE_IDENTIFIER: com.fglass.lookingglass
+    EAS_PROJECT_ID: 288880ab-d2ce-4857-8fe3-3d03ae72a3ce
+    EXPO_ACCOUNT_NAME: fglass
+    EXPO_PROJECT_SLUG: looking-glass
+
+jobs:
+    checks:
+        if: github.event_name == 'push'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Lint
+              run: npm run lint
+
+            - name: Typecheck
+              run: npx tsc --noEmit
+
+            - name: Expo Doctor
+              run: npx expo-doctor
+
+    preview_ios_build:
+        if: >
+            (
+                github.event_name == 'pull_request_target' &&
+                github.event.pull_request.merged == true &&
+                (
+                    contains(github.event.pull_request.title, '[preview]') ||
+                    contains(github.event.pull_request.body, '[preview]')
+                )
+            ) ||
+            (
+                github.event_name == 'push' &&
+                github.ref == 'refs/heads/main' &&
+                contains(github.event.head_commit.message, '[preview]')
+            )
+        runs-on: ubuntu-latest
+        env:
+            EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        steps:
+            - name: Checkout merged commit
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merge_commit_sha || github.sha }}
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Setup EAS CLI
+              uses: expo/expo-github-action@v8
+              with:
+                  eas-version: latest
+                  token: ${{ secrets.EXPO_TOKEN }}
+
+            - name: Write EAS config
+              env:
+                  EXPO_PUBLIC_AWS_ACCESS_KEY: ${{ secrets.EXPO_PUBLIC_AWS_ACCESS_KEY }}
+                  EXPO_PUBLIC_AWS_SECRET_KEY: ${{ secrets.EXPO_PUBLIC_AWS_SECRET_KEY }}
+                  EXPO_PUBLIC_REACTION_MAP: ${{ secrets.EXPO_PUBLIC_REACTION_MAP }}
+                  EXPO_PUBLIC_S3_BUCKET_NAME: ${{ secrets.EXPO_PUBLIC_S3_BUCKET_NAME }}
+                  EXPO_PUBLIC_S3_BUCKET_REGION: ${{ secrets.EXPO_PUBLIC_S3_BUCKET_REGION }}
+                  EXPO_PUBLIC_STREAK_START_DATE: ${{ secrets.EXPO_PUBLIC_STREAK_START_DATE }}
+              run: |
+                  node <<'NODE'
+                  const fs = require('fs')
+
+                  const env = {
+                    APP_VARIANT: process.env.APP_VARIANT,
+                    BUNDLE_IDENTIFIER: process.env.BUNDLE_IDENTIFIER,
+                    EAS_PROJECT_ID: process.env.EAS_PROJECT_ID,
+                  }
+
+                  for (const key of [
+                    'EXPO_PUBLIC_AWS_ACCESS_KEY',
+                    'EXPO_PUBLIC_AWS_SECRET_KEY',
+                    'EXPO_PUBLIC_REACTION_MAP',
+                    'EXPO_PUBLIC_S3_BUCKET_NAME',
+                    'EXPO_PUBLIC_S3_BUCKET_REGION',
+                    'EXPO_PUBLIC_STREAK_START_DATE',
+                  ]) {
+                    if (process.env[key]) {
+                      env[key] = process.env[key]
+                    }
+                  }
+
+                  fs.writeFileSync(
+                    'eas.json',
+                    `${JSON.stringify({
+                      cli: { version: '>= 8.0.0' },
+                      build: {
+                        preview: {
+                          distribution: 'internal',
+                          env,
+                        },
+                      },
+                    }, null, 2)}\n`,
+                  )
+                  NODE
+
+            - name: Start iOS preview build
+              id: eas_build
+              run: |
+                  set -eu
+                  npx eas-cli build --platform ios --profile preview --non-interactive --json > eas-build.json
+                  node <<'NODE'
+                  const fs = require('fs')
+                  const output = fs.readFileSync('eas-build.json', 'utf8').trim()
+
+                  const parsed = JSON.parse(output)
+                  const build = Array.isArray(parsed) ? parsed[0] : parsed
+                  const id = build.id || ''
+                  const accountName = process.env.EXPO_ACCOUNT_NAME
+                  const projectSlug = process.env.EXPO_PROJECT_SLUG
+                  const detailsUrl = id
+                    ? `https://expo.dev/accounts/${accountName}/projects/${projectSlug}/builds/${id}`
+                    : ''
+                  fs.appendFileSync(process.env.GITHUB_OUTPUT, `build_id=${id}\n`)
+                  fs.appendFileSync(process.env.GITHUB_OUTPUT, `details_url=${detailsUrl}\n`)
+                  NODE
+
+            - name: Add build links to summary
+              run: |
+                  {
+                    echo "### iOS preview build started"
+                    echo ""
+                    echo "- Build ID: \`${{ steps.eas_build.outputs.build_id }}\`"
+                    echo "- Build details: ${{ steps.eas_build.outputs.details_url }}"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Comment on PR with build links
+              if: github.event_name == 'pull_request_target'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const mention = `@${context.actor}`
+                      const detailsUrl = `${{ steps.eas_build.outputs.details_url }}`
+                      const lines = [
+                        mention,
+                        '',
+                        'iOS `preview` build:',
+                        '',
+                        `- ${detailsUrl || 'Not available'}`,
+                      ]
+                      await github.rest.issues.createComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: context.payload.pull_request.number,
+                        body: lines.join('\n'),
+                      })
+
+            - name: Comment on commit with build links
+              if: github.event_name == 'push'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const mention = `@${context.actor}`
+                      const detailsUrl = `${{ steps.eas_build.outputs.details_url }}`
+                      const lines = [
+                        mention,
+                        '',
+                        'iOS `preview` build:',
+                        '',
+                        `- ${detailsUrl || 'Not available'}`,
+                      ]
+                      await github.rest.repos.createCommitComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        commit_sha: context.sha,
+                        body: lines.join('\n'),
+                      })
