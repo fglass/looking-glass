@@ -18,7 +18,7 @@ permissions:
 env:
     APP_VARIANT: preview
     BUNDLE_IDENTIFIER: com.fglass.lookingglass
-    EAS_PROJECT_ID: 288880ab-d2ce-4857-8fe3-3d03ae72a3ce
+    EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
     EXPO_ACCOUNT_NAME: fglass
     EXPO_PROJECT_SLUG: looking-glass
 
