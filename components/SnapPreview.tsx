@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   LayoutChangeEvent,
@@ -36,12 +36,14 @@ export const SnapPreview = ({
   }: {
     hidden: boolean;
     caption?: SnapCaption | null;
-  }) => void;
+  }) => void | Promise<void>;
   onClose: () => void;
 }) => {
   const [captionText, setCaptionText] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [imageLayout, setImageLayout] = useState({ width: 0, height: 0 });
+  const sendingRef = useRef(false);
 
   const baseTop = useSharedValue(0);
   const offsetY = useSharedValue(0);
@@ -110,6 +112,22 @@ export const SnapPreview = ({
       return value;
     }
     return lines.slice(0, MAX_CAPTION_LINES).join("\n");
+  };
+
+  const send = async (hidden: boolean) => {
+    // Prevent a double tap from sending the same snap twice.
+    if (sendingRef.current) {
+      return;
+    }
+
+    sendingRef.current = true;
+    setIsSending(true);
+    try {
+      await onSend({ hidden, caption: captionPayload() });
+    } finally {
+      sendingRef.current = false;
+      setIsSending(false);
+    }
   };
   
   const onSave = async () => {
@@ -190,17 +208,17 @@ export const SnapPreview = ({
             </Text>
           </View>
         )}
-        <View style={styles.overlayBottomContainer}>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => onSend({ hidden: false, caption: captionPayload() })}
-            onLongPress={() =>
-              onSend({ hidden: true, caption: captionPayload() })
-            }
-          >
-            <MaterialIcons name="send" size={42} color="white" />
-          </TouchableOpacity>
-        </View>
+        {!isSending && (
+          <View style={styles.overlayBottomContainer}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => send(false)}
+              onLongPress={() => send(true)}
+            >
+              <MaterialIcons name="send" size={42} color="white" />
+            </TouchableOpacity>
+          </View>
+        )}
         <View style={styles.overlayBottomLeftContainer}>
           <TouchableOpacity style={styles.button} onPress={onSave}>
             <MaterialIcons name="save-alt" size={42} color="white" />

@@ -17,6 +17,10 @@ This repository is an Expo/React Native app for a private, S3-backed photo shari
 - Run platform targets with `npm run ios`, `npm run android`, or `npm run web`.
 - Run linting with `npm run lint`.
 
+## CI
+
+- Prefix a commit message with the literal `[preview]` tag when the commit should trigger an iOS preview build in CI, for example: `[preview] fix: prevent duplicate snap sends`.
+
 ## Environment
 
 - The app depends on Expo configuration plus S3-related environment variables from `.env`, `.env.local`, or `eas.json`.
