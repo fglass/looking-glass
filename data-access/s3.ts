@@ -21,6 +21,11 @@ const s3 = new S3({
 const BUCKET = process.env.EXPO_PUBLIC_S3_BUCKET_NAME ?? "";
 
 export const getSnaps = async (startAfter?: string) => {
+  if (!BUCKET) {
+    console.error("Cannot fetch snaps: S3 bucket is not configured");
+    return [];
+  }
+
   const params: S3.Types.ListObjectsV2Request = {
     Bucket: BUCKET,
     Prefix: "snap",
@@ -48,6 +53,7 @@ export const getSnaps = async (startAfter?: string) => {
       params.ContinuationToken = data.NextContinuationToken;
     } catch (error) {
       console.error("Error fetching snaps:", error);
+      return snaps;
     }
   }
 

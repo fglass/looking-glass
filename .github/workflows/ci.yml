@@ -19,7 +19,7 @@ env:
     APP_VARIANT: preview
     BUNDLE_IDENTIFIER: com.fglass.lookingglass
     EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
-    EXPO_ACCOUNT_NAME: fglass
+    EXPO_ACCOUNT_NAME: ${{ vars.EXPO_ACCOUNT_NAME }}
     EXPO_PROJECT_SLUG: looking-glass
 
 jobs:
@@ -91,13 +91,27 @@ jobs:
               env:
                   EXPO_PUBLIC_AWS_ACCESS_KEY: ${{ secrets.EXPO_PUBLIC_AWS_ACCESS_KEY }}
                   EXPO_PUBLIC_AWS_SECRET_KEY: ${{ secrets.EXPO_PUBLIC_AWS_SECRET_KEY }}
-                  EXPO_PUBLIC_REACTION_MAP: ${{ secrets.EXPO_PUBLIC_REACTION_MAP }}
-                  EXPO_PUBLIC_S3_BUCKET_NAME: ${{ secrets.EXPO_PUBLIC_S3_BUCKET_NAME }}
-                  EXPO_PUBLIC_S3_BUCKET_REGION: ${{ secrets.EXPO_PUBLIC_S3_BUCKET_REGION }}
-                  EXPO_PUBLIC_STREAK_START_DATE: ${{ secrets.EXPO_PUBLIC_STREAK_START_DATE }}
+                  EXPO_PUBLIC_REACTION_MAP: ${{ vars.EXPO_PUBLIC_REACTION_MAP }}
+                  EXPO_PUBLIC_S3_BUCKET_NAME: ${{ vars.EXPO_PUBLIC_S3_BUCKET_NAME }}
+                  EXPO_PUBLIC_S3_BUCKET_REGION: ${{ vars.EXPO_PUBLIC_S3_BUCKET_REGION }}
+                  EXPO_PUBLIC_STREAK_START_DATE: ${{ vars.EXPO_PUBLIC_STREAK_START_DATE }}
               run: |
                   node <<'NODE'
                   const fs = require('fs')
+
+                  const requiredKeys = [
+                    'EAS_PROJECT_ID',
+                    'EXPO_PUBLIC_AWS_ACCESS_KEY',
+                    'EXPO_PUBLIC_AWS_SECRET_KEY',
+                    'EXPO_PUBLIC_REACTION_MAP',
+                    'EXPO_PUBLIC_S3_BUCKET_NAME',
+                    'EXPO_PUBLIC_S3_BUCKET_REGION',
+                    'EXPO_PUBLIC_STREAK_START_DATE',
+                  ]
+                  const missingKeys = requiredKeys.filter((key) => !process.env[key])
+                  if (missingKeys.length > 0) {
+                    throw new Error(`Missing required build environment: ${missingKeys.join(', ')}`)
+                  }
 
                   const env = {
                     APP_VARIANT: process.env.APP_VARIANT,
