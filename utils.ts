@@ -182,8 +182,65 @@ const parseReactionMap = () => {
   return Object.fromEntries(entries) as Record<string, string>;
 };
 
-export const TAG_TO_EMOJI: Record<string, string> = parseReactionMap();
-export const REACTION_EMOJIS = Object.values(TAG_TO_EMOJI);
+const BASE_REACTIONS = parseReactionMap();
+const SEASONAL_REACTIONS = {
+  halloween: "🎃",
+  christmas: "🎄",
+  easter: "🐰",
+};
+
+export const TAG_TO_EMOJI: Record<string, string> = {
+  ...BASE_REACTIONS,
+  // Keep seasonal tags readable in the gallery all year round.
+  ...SEASONAL_REACTIONS,
+};
+
+const getEasterSunday = (year: number) => {
+  // Gregorian computus (Meeus/Jones/Butcher).
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return Date.UTC(year, month - 1, day);
+};
+
+export const getReactionEmojis = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+
+  // Compare local calendar days as UTC dates to avoid DST-length days.
+  const daysUntilEaster =
+    (getEasterSunday(year) - Date.UTC(year, month, day)) / 86_400_000;
+  const activeReactions = { ...BASE_REACTIONS };
+
+  // Seasonal tags are controlled by the calendar even if configured in env.
+  for (const tag of Object.keys(SEASONAL_REACTIONS)) {
+    delete activeReactions[tag];
+  }
+  if (month === 9 && day >= 24) {
+    activeReactions.halloween = SEASONAL_REACTIONS.halloween;
+  }
+  if (month === 11) {
+    activeReactions.christmas = SEASONAL_REACTIONS.christmas;
+  }
+  if (daysUntilEaster >= 0 && daysUntilEaster <= 7) {
+    activeReactions.easter = SEASONAL_REACTIONS.easter;
+  }
+  return [...new Set(Object.values(activeReactions))];
+};
+
+export const REACTION_EMOJIS = getReactionEmojis();
 
 export const EMOJI_TO_TAG = Object.fromEntries(
   Object.entries(TAG_TO_EMOJI).map(([tag, emoji]) => [emoji, tag]),
