@@ -86,10 +86,10 @@ export const SnapPreview = ({
     setImageLayout({ width, height });
     if (width > 0 && height > 0) {
       maxY.value = Math.max(0, height - 40);
-      baseTop.value = height * BASE_CAPTION_Y;
+      baseTop.set(height * BASE_CAPTION_Y);
       const minOffset = -baseTop.value;
       const maxOffset = maxY.value - baseTop.value;
-      offsetY.value = clampWorklet(offsetY.value, minOffset, maxOffset);
+      offsetY.set(clampWorklet(offsetY.value, minOffset, maxOffset));
     }
   };
 
@@ -142,7 +142,7 @@ export const SnapPreview = ({
         return;
       }
 
-      await MediaLibrary.saveToLibraryAsync(uri);
+      await MediaLibrary.Asset.create(uri);
       Alert.alert("Success", "Snap saved!");
     } catch (error) {
       console.error("Error saving image:", error);

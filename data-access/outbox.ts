@@ -67,7 +67,7 @@ const defaultStorageAdapter: OutboxStorageAdapter = {
 
     const extension = Paths.extname(sourceUri) || ".jpg";
     const destination = new File(outboxDir, `${id}${extension}`);
-    new File(sourceUri).copy(destination);
+    await new File(sourceUri).copy(destination);
     return destination.uri;
   },
   deleteImage: async (uri) => {

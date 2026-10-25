@@ -10,7 +10,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import type { ViewToken } from "react-native";
+import type { ListViewToken } from "react-native";
 import { Image } from "expo-image";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -478,7 +478,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
         localUri = output.uri;
       }
 
-      await MediaLibrary.saveToLibraryAsync(localUri);
+      await MediaLibrary.Asset.create(localUri);
       Alert.alert("Success", "Snap saved!");
     } catch (error) {
       console.error("Error saving image:", error);
@@ -509,7 +509,7 @@ export default function GalleryView({ onClose }: { onClose: () => void }) {
   }).current;
 
   const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken<GalleryRow>[] }) => {
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
       let firstVisibleDatedRow: GalleryRow | null = null;
       let firstVisibleRowIndex = Infinity;
 

@@ -27,12 +27,62 @@ import {
   Skia,
   Image as SkiaImage,
   TextBlob,
+  SkPath,
   matchFont,
-  notifyChange,
   useImage,
 } from "@shopify/react-native-skia";
 import { scheduleOnRN } from "react-native-worklets";
-import Animated, { useSharedValue } from "react-native-reanimated";
+import Animated, { SharedValue, useSharedValue } from "react-native-reanimated";
+
+const ScratchCard = ({
+  uri,
+  scratchPath,
+}: {
+  uri: string;
+  scratchPath: SharedValue<SkPath>;
+}) => {
+  const win = Dimensions.get("window");
+  const image = useImage(uri);
+  const font = matchFont({
+    fontFamily: Platform.select({ ios: "Arial", default: "serif" }),
+    fontSize: 25,
+    fontStyle: "normal",
+    fontWeight: "bold",
+  });
+  const label = Skia.TextBlob.MakeFromText("scratch to reveal", font);
+
+  return (
+    <Canvas style={styles.imageContainer}>
+      <SkiaImage
+        image={image}
+        x={0}
+        y={0}
+        width={win.width}
+        height={win.height}
+        fit={"cover"}
+      />
+      <Group layer>
+        <Fill color="silver" />
+        <TextBlob
+          x={100}
+          y={win.height / 2}
+          blob={label}
+          color="white"
+          opacity={0.25}
+        />
+        <Path
+          path={scratchPath}
+          style={"stroke"}
+          strokeJoin={"round"}
+          strokeCap={"round"}
+          strokeWidth={75}
+          color={"white"}
+          blendMode={"clear"}
+        />
+      </Group>
+    </Canvas>
+  );
+};
 
 export const SnapView = ({
   snap,
@@ -58,63 +108,19 @@ export const SnapView = ({
   });
 
   const scratchPath = useSharedValue(Skia.Path.Make());
+  const scratchBuilder = useSharedValue(Skia.PathBuilder.Make());
   const scratchHandler = Gesture.Pan()
     .onBegin((e) => {
       "worklet";
-      scratchPath.value.moveTo(e.x, e.y);
-      scratchPath.value.lineTo(e.x, e.y);
-      notifyChange(scratchPath);
+      scratchBuilder.value.moveTo(e.x, e.y);
+      scratchBuilder.value.lineTo(e.x, e.y);
+      scratchPath.value = scratchBuilder.value.build();
     })
     .onUpdate((e) => {
       "worklet";
-      scratchPath.value.lineTo(e.x, e.y);
-      notifyChange(scratchPath);
+      scratchBuilder.value.lineTo(e.x, e.y);
+      scratchPath.value = scratchBuilder.value.build();
     });
-
-  const ScratchCard = () => {
-    const win = Dimensions.get("window");
-    const image = useImage(snap.uri);
-
-    const font = matchFont({
-      fontFamily: Platform.select({ ios: "Arial", default: "serif" }),
-      fontSize: 25,
-      fontStyle: "normal",
-      fontWeight: "bold",
-    });
-    const label = Skia.TextBlob.MakeFromText("scratch to reveal", font);
-
-    return (
-      <Canvas style={styles.imageContainer}>
-        <SkiaImage
-          image={image}
-          x={0}
-          y={0}
-          width={win.width}
-          height={win.height}
-          fit={"cover"}
-        />
-        <Group layer>
-          <Fill color="silver" />
-          <TextBlob
-            x={100}
-            y={win.height / 2}
-            blob={label}
-            color="white"
-            opacity={0.25}
-          />
-          <Path
-            path={scratchPath}
-            style={"stroke"}
-            strokeJoin={"round"}
-            strokeCap={"round"}
-            strokeWidth={75}
-            color={"white"}
-            blendMode={"clear"}
-          />
-        </Group>
-      </Canvas>
-    );
-  };
 
   const closeOnTap = Gesture.Tap()
     .maxDistance(10)
@@ -138,7 +144,7 @@ export const SnapView = ({
         {hidden ? (
           <GestureDetector gesture={scratchGesture}>
             <View style={styles.imageContainer}>
-              <ScratchCard />
+              <ScratchCard uri={snap.uri} scratchPath={scratchPath} />
             </View>
           </GestureDetector>
         ) : (

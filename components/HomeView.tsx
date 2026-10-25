@@ -240,6 +240,8 @@ export default function HomeView() {
     if (checkForNewSnaps && clientId && lastSnap) {
       console.log("Checking for new snaps...");
       fetchNewSnaps(lastSnap.Key, lastSnap.LastModified);
+      // Consume the notification trigger immediately so arrivals during the fetch can retrigger it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCheckForNewSnaps(false);
     }
   }, [checkForNewSnaps, clientId, lastSnap, selfSend]);
